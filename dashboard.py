@@ -300,19 +300,21 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 art_df = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ArticleSKU').agg({
                     'GMV': 'sum', 'Spend': 'sum', 'Clicks': 'sum', 'Sold': 'sum', 'Wish': 'sum'
                 }).reset_index()
-                art_df['ROAS'] = art_df['GMV'] / art_df['Spend'].replace(0,1)
-                art_df['COS'] = art_df['Spend'] / art_df['GMV'].replace(0,1)
+                art_df['ROAS'] = art_df.apply(lambda x: x['GMV']/x['Spend'] if x['Spend'] > 0 else 0, axis=1)
+                art_df['COS'] = art_df.apply(lambda x: x['Spend']/x['GMV'] if x['GMV'] > 0 else 0, axis=1)
+                art_df['CVR'] = art_df.apply(lambda x: x['Sold']/x['Clicks'] if x['Clicks'] > 0 else 0, axis=1)
                 
-                st.dataframe(art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'Wish']].sort_values('ROAS', ascending=False),
+                st.dataframe(art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'CVR', 'Wish']].sort_values('ROAS', ascending=False),
                              column_config={
                                  "ROAS": st.column_config.NumberColumn("ROAS", format="%.2fx"),
                                  "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
+                                 "CVR": st.column_config.NumberColumn("CVR", format="%.1%"),
                                  "Wish": "Wishlists"
                              }, hide_index=True, use_container_width=True)
             else:
-                st.warning("Insufficient week data in marketing file.")
+                st.warning("Please upload a marketing file containing at least two weeks of data.")
         else:
-            st.info("Upload Marketing CSV in the sidebar.")
+            st.info("Upload Marketing CSV in the sidebar to view performance depth.")
 
     with tab4:
         st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
