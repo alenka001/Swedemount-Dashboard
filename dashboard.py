@@ -119,12 +119,62 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             col.dataframe(m.sort_values('CW_kr', ascending=False), hide_index=True, use_container_width=True)
 
     with tab2:
-        st.subheader("Top 50 Articles (Compressed)")
+        st.subheader("🏆 Top 50 Articles (Performance & Trends)")
+
+        # 1. Prepare Inventory Mapping (to get Article Names)
+        # Look for a name column in df_inv
+        inv_name_col = next((c for c in df_inv.columns if any(k in c.lower() for k in ['name', 'title', 'product'])), None)
+        
+        if inv_name_col:
+            inv_map = df_inv[['Article variant', inv_name_col]].drop_duplicates('Article variant')
+        else:
+            inv_map = pd.DataFrame(columns=['Article variant', 'Article Name'])
+
+        # 2. Aggregate Sales Data
         cw_art = df_cw.groupby(['Brand', 'Article variant', 'Zalando article variant'])[['NMV_EUR', 'Sold articles']].sum().reset_index()
-        lw_art = df_lw.groupby('Article variant')['NMV_EUR'].sum().reset_index()
-        top = cw_art.merge(lw_art, on='Article variant', how='left', suffixes=('_CW', '_LW')).fillna(0)
-        top = top.sort_values('NMV_EUR_CW', ascending=False).head(50)
-        st.dataframe(top, hide_index=True, use_container_width=True)
+        lw_art = df_lw.groupby('Article variant')[['NMV_EUR']].sum().reset_index().rename(columns={'NMV_EUR': 'NMV_LW'})
+        
+        # 3. Merge Data
+        top = cw_art.merge(lw_art, on='Article variant', how='left').fillna(0)
+        
+        # 4. Determine Status (Up, Down, New)
+        def get_trend_status(row):
+            if row['NMV_LW'] == 0:
+                return "🆕 New"
+            elif row['NMV_EUR'] > row['NMV_LW']:
+                return "📈 Up"
+            elif row['NMV_EUR'] < row['NMV_LW']:
+                return "📉 Down"
+            else:
+                return "➖ Flat"
+
+        top['Trend'] = top.apply(get_trend_status, axis=1)
+        
+        # 5. Bring in the Article Names from Inventory
+        if inv_name_col:
+            top = top.merge(inv_map, on='Article variant', how='left')
+            top = top.rename(columns={inv_name_col: 'Article Name'})
+        else:
+            top['Article Name'] = "N/A (Check Inv Upload)"
+
+        # 6. Final Formatting and Display
+        top = top.sort_values('NMV_EUR', ascending=False).head(50)
+        
+        # Calculate growth % for the column delta
+        top['Growth %'] = (top['NMV_EUR'] - top['NMV_LW']) / top['NMV_LW'].apply(lambda x: x if x > 0 else 1)
+
+        st.dataframe(
+            top[['Trend', 'Article Name', 'Article variant', 'Sold articles', 'NMV_EUR', 'Growth %']], 
+            column_config={
+                "Trend": st.column_config.TextColumn("Status"),
+                "Article Name": st.column_config.TextColumn("Article Name", width="large"),
+                "NMV_EUR": st.column_config.NumberColumn("NMV (EUR)", format="€%.0f"),
+                "Growth %": st.column_config.NumberColumn("vs LW", format="%.1f%%"),
+                "Sold articles": st.column_config.NumberColumn("Units Sold")
+            }, 
+            hide_index=True, 
+            use_container_width=True
+        )
 
     with tab3:
         if f_mkt:
