@@ -152,7 +152,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 curr_yr = years[-1]
                 last_yr = years[-2] if len(years) > 1 else None
                 
-                # Fetch total sales for Blended COS (Total NMV in EUR)
                 total_sales_eur = (nmv_cw_sek / ex_rate) if 'nmv_cw_sek' in locals() else 0
 
                 def get_mkt_stats(y, w):
@@ -186,7 +185,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 # --- TREND CHART ---
                 st.markdown("---")
                 trend_df = mkt[mkt['Year'] == curr_yr].groupby('Week').agg({'Spend':'sum', 'GMV':'sum'}).reset_index()
-                trend_df['ROAS'] = trend_df['GMV'] / trend_df['Spend']
+                trend_df['ROAS'] = trend_df['GMV'] / trend_df['Spend'].replace(0, 1)
                 
                 fig = make_subplots(specs=[[{"secondary_y": True}]])
                 fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['Spend'], name="Spend", marker_color='#ff4b4b'), secondary_y=False)
@@ -210,20 +209,24 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
                 camp_final = c_cw.join(c_lw, rsuffix='_LW', how='left').join(c_llw, rsuffix='_LLW', how='left').join(c_ly, rsuffix='_LY', how='left').fillna(0)
                 
-                # Check for column existence before math to prevent KeyErrors
+                # Check for column existence
                 for col_suffix in ['_LW', '_LLW', '_LY']:
                     if f'Spend{col_suffix}' not in camp_final.columns: camp_final[f'Spend{col_suffix}'] = 0.0
                     if f'GMV{col_suffix}' not in camp_final.columns: camp_final[f'GMV{col_suffix}'] = 0.0
                 
-                camp_final['COS'] = camp_final['Spend'] / camp_final['GMV'].replace(0,1)
-                camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].replace(0,1)
-                camp_final['Spend LW vs LY %'] = (camp_final['Spend_LW'] - camp_final['Spend_LY']) / camp_final['Spend_LY'].replace(0,1)
-                camp_final['GMV vs LLW %'] = (camp_final['GMV_LW'] - camp_final['GMV_LLW']) / camp_final['GMV_LLW'].replace(0,1)
-                camp_final['GMV LW vs LY %'] = (camp_final['GMV_LW'] - camp_final['GMV_LY']) / camp_final['GMV_LY'].replace(0,1)
+                # Fixed Trend logic (avoiding .replace() on floats)
+                def calc_roas_trend(row):
+                    current_roas = row['GMV'] / row['Spend'] if row['Spend'] > 0 else 0
+                    prev_roas = row['GMV_LW'] / row['Spend_LW'] if row['Spend_LW'] > 0 else 0
+                    return "🟢" if current_roas >= prev_roas else "🔴"
+
+                camp_final['COS'] = camp_final.apply(lambda x: x['Spend']/x['GMV'] if x['GMV'] > 0 else 0, axis=1)
+                camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].apply(lambda x: x if x != 0 else 1)
+                camp_final['Spend LW vs LY %'] = (camp_final['Spend_LW'] - camp_final['Spend_LY']) / camp_final['Spend_LY'].apply(lambda x: x if x != 0 else 1)
+                camp_final['GMV vs LLW %'] = (camp_final['GMV_LW'] - camp_final['GMV_LLW']) / camp_final['GMV_LLW'].apply(lambda x: x if x != 0 else 1)
                 
-                camp_final['ROAS LW'] = camp_final['GMV_LW'] / camp_final['Spend_LW'].replace(0,1)
-                camp_final['ROAS LLW'] = camp_final['GMV_LLW'] / camp_final['Spend_LLW'].replace(0,1)
-                camp_final['ROAS Trend'] = camp_final.apply(lambda x: "🟢" if (x['GMV']/x['Spend'].replace(0,1)) > x['ROAS LW'] else "🔴", axis=1)
+                camp_final['ROAS LW'] = camp_final.apply(lambda x: x['GMV_LW']/x['Spend_LW'] if x['Spend_LW'] > 0 else 0, axis=1)
+                camp_final['ROAS Trend'] = camp_final.apply(calc_roas_trend, axis=1)
 
                 st.dataframe(camp_final.reset_index()[['ZMSCampaign', 'Spend', 'Spend vs LLW %', 'GMV', 'COS', 'ROAS LW', 'ROAS Trend']], 
                              column_config={
@@ -240,9 +243,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 art_df = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ArticleSKU').agg({
                     'GMV': 'sum', 'Spend': 'sum', 'Clicks': 'sum', 'Sold': 'sum', 'Wish': 'sum'
                 }).reset_index()
-                art_df['ROAS'] = art_df['GMV'] / art_df['Spend'].replace(0,1)
-                art_df['COS'] = art_df['Spend'] / art_df['GMV'].replace(0,1)
-                art_df['CVR'] = art_df['Sold'] / art_df['Clicks'].replace(0,1)
+                art_df['ROAS'] = art_df.apply(lambda x: x['GMV']/x['Spend'] if x['Spend'] > 0 else 0, axis=1)
+                art_df['COS'] = art_df.apply(lambda x: x['Spend']/x['GMV'] if x['GMV'] > 0 else 0, axis=1)
+                art_df['CVR'] = art_df.apply(lambda x: x['Sold']/x['Clicks'] if x['Clicks'] > 0 else 0, axis=1)
                 
                 st.dataframe(art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'CVR', 'Wish']].sort_values('ROAS', ascending=False),
                              column_config={
