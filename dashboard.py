@@ -190,14 +190,48 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         
         st.caption("💡 Cells highlighted in red indicate stock levels are currently lower than this week's sales volume.")
 
-    # --- TAB 3: MARKETING ---
     with tab3:
         if f_mkt:
             mkt = load_csv_robust(f_mkt)
-            if mkt is not None:
-                mkt.columns = [c.replace(' ', '') for c in mkt.columns]
-                # Filter metrics and show
-                st.info("Marketing Data Active. Metrics processing...")
+            mkt.columns = [c.replace(' ', '') for c in mkt.columns]
+            
+            # Mapping
+            m_cols = {'Spend': 'Budgetspent', 'GMV': 'GMV', 'Wish': 'Addtowishlist', 'Clicks': 'Clicks', 'Sold': 'Itemssold', 'Impressions': 'Impressions'}
+            for k, v in m_cols.items():
+                target_col = v if v in mkt.columns else next((c for c in mkt.columns if k.lower() in c.lower()), None)
+                if target_col: mkt[k] = mkt[target_col].apply(clean_val)
+                else: mkt[k] = 0.0
+            
+            mkt['Week'] = mkt['Week'].apply(clean_val).astype(int)
+            mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2024
+            
+            weeks = sorted(mkt['Week'].unique())
+            if len(weeks) >= 2:
+                cw_w, lw_w = weeks[-1], weeks[-2]
+                curr_yr = sorted(mkt['Year'].unique())[-1]
+                
+                s_cw = mkt[(mkt['Year'] == curr_yr) & (mkt['Week'] == cw_w)][['Spend', 'GMV', 'Impressions']].sum()
+                s_lw = mkt[(mkt['Year'] == curr_yr) & (mkt['Week'] == lw_w)][['Spend', 'GMV', 'Impressions']].sum()
+                
+                roas_cw = s_cw['GMV'] / s_cw['Spend'] if s_cw['Spend'] > 0 else 0
+                cos_cw = s_cw['Spend'] / s_cw['GMV'] if s_cw['GMV'] > 0 else 0
+                total_sales_eur = nmv_cw_sek / ex_rate
+                blended_cos = s_cw['Spend'] / total_sales_eur if total_sales_eur > 0 else 0
+
+                k1, k2, k3, k4, k5 = st.columns(5)
+                k1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}")
+                k2.metric("ROAS", f"{roas_cw:.2f}x")
+                k3.metric("COS", f"{cos_cw:.1%}")
+                k4.metric("Blended COS", f"{blended_cos:.1%}")
+                k5.metric("Impressions", f"{s_cw['Impressions']:,.0f}")
+
+                # Trend Chart
+                trend = mkt[mkt['Year'] == curr_yr].groupby('Week').agg({'Spend':'sum', 'GMV':'sum'}).reset_index()
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                fig.add_trace(go.Bar(x=trend['Week'], y=trend['Spend'], name="Spend", marker_color='#ff4b4b'), secondary_y=False)
+                fig.add_trace(go.Bar(x=trend['Week'], y=trend['GMV'], name="GMV", marker_color='#0068c9', opacity=0.4), secondary_y=False)
+                fig.update_layout(title="Marketing Efficiency", height=300)
+                st.plotly_chart(fig, use_container_width=True)
 
     with tab4:
         st.subheader("🔄 Z-Hybrid Performance")
