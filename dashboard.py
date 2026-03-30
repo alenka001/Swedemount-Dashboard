@@ -73,20 +73,40 @@ f_hybrid = st.sidebar.file_uploader("6. Z-Hybrid Daily Sales (CSV)", type="csv")
 
 # --- MAIN LOGIC ---
 if all([f_cw, f_lw, f_ly, f_inv]):
-    df_cw = load_csv_robust(f_cw)
-    df_lw = load_csv_robust(f_lw)
-    df_ly = load_csv_robust(f_ly)
-    df_inv = load_csv_robust(f_inv)
+    df_cw = load_csv_robust(f_cw); df_lw = load_csv_robust(f_lw)
+    df_ly = load_csv_robust(f_ly); df_inv = load_csv_robust(f_inv)
     
-    # Pre-clean primary sales data
     for df in [df_cw, df_lw, df_ly]:
         df['NMV_EUR'] = df['NMV'].apply(clean_val)
-        df['Sold_Units'] = df['Sold articles'].apply(clean_val)
         df['NMV_SEK'] = df['NMV_EUR'] * ex_rate
 
     nmv_cw_sek = df_cw['NMV_SEK'].sum()
+    nmv_lw_sek = df_lw['NMV_SEK'].sum()
+    nmv_ly_sek = df_ly['NMV_SEK'].sum()
+
     st.title("🚀 Weekly Strategic Marketplace Board")
 
+    # ROW 1: EUR
+    st.subheader("🇪🇺 Row 1: EUR Performance")
+    e1, e2, e3 = st.columns(3)
+    e1.metric("Current EUR", f"€{nmv_cw_sek/ex_rate:,.0f}")
+    e2.metric("LW EUR", f"€{nmv_lw_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
+    e3.metric("LY EUR", f"€{nmv_ly_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
+
+    # ROW 2: SEK
+    st.subheader("🇸🇪 Row 2: SEK Performance & Target Gaps")
+    s1, s2, s3, s4, s5 = st.columns(5)
+    s1.metric("LW SEK", f"{nmv_lw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
+    s2.metric("LY SEK", f"{nmv_ly_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
+    
+    b_gap = (nmv_cw_sek / weekly_budget_sek) - 1
+    s3.metric("vs Budget", f"{weekly_budget_sek:,.0f} kr", delta=f"{b_gap:.1%} {'Ahead' if b_gap > 0 else 'Behind'}")
+    
+    p_gap = (nmv_cw_sek / weekly_prognos_sek) - 1
+    s4.metric("vs Prognos", f"{weekly_prognos_sek:,.0f} kr", delta=f"{p_gap:.1%} {'Ahead' if p_gap > 0 else 'Behind'}")
+    s5.metric("Current Total", f"{nmv_cw_sek:,.0f} kr")
+
+    st.markdown("---")
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
 
     with tab1:
