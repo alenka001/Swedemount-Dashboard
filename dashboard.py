@@ -261,13 +261,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 fig.update_layout(title="Marketing Efficiency Trend", barmode='group', height=350, margin=dict(l=0,r=0,t=30,b=0))
                 st.plotly_chart(fig, use_container_width=True)
 
-                The error is persisting because the code is still trying to use .replace(0,1) on a floating-point number inside the apply function. In Python, .replace() is a string method, and while Pandas Series have a similar method, individual numbers (scalars) do not.
-
-I have updated the Campaign Analytics and Article Analytics sections within Tab 3 to use a safe division check (x if x != 0 else 1) and ensured the Article table also follows your rounding requirements.
-
-Replace the Campaign Analytics and Article Analytics logic inside tab3 with this:
-
-Python
                 # --- CAMPAIGN PERFORMANCE ---
                 st.markdown("---")
                 st.subheader("📣 Campaign Analytics (WoW & YoY Compare)")
