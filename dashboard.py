@@ -261,9 +261,16 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 fig.update_layout(title="Marketing Efficiency Trend", barmode='group', height=350, margin=dict(l=0,r=0,t=30,b=0))
                 st.plotly_chart(fig, use_container_width=True)
 
+                The error is persisting because the code is still trying to use .replace(0,1) on a floating-point number inside the apply function. In Python, .replace() is a string method, and while Pandas Series have a similar method, individual numbers (scalars) do not.
+
+I have updated the Campaign Analytics and Article Analytics sections within Tab 3 to use a safe division check (x if x != 0 else 1) and ensured the Article table also follows your rounding requirements.
+
+Replace the Campaign Analytics and Article Analytics logic inside tab3 with this:
+
+Python
                 # --- CAMPAIGN PERFORMANCE ---
                 st.markdown("---")
-                st.subheader("📣 Campaign Analytics (with COS)")
+                st.subheader("📣 Campaign Analytics (WoW & YoY Compare)")
                 
                 def get_camp_data(y, w):
                     if w is None: return pd.DataFrame(columns=['Spend', 'GMV'])
@@ -272,27 +279,40 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 c_cw = get_camp_data(curr_yr, cw_w)
                 c_lw = get_camp_data(curr_yr, lw_w)
                 c_llw = get_camp_data(curr_yr, llw_w)
+                c_ly = get_camp_data(last_yr, cw_w)
 
-                camp_final = c_cw.join(c_lw, rsuffix='_LW', how='left').join(c_llw, rsuffix='_LLW', how='left').fillna(0)
+                camp_final = c_cw.join(c_lw, rsuffix='_LW', how='left').join(c_llw, rsuffix='_LLW', how='left').join(c_ly, rsuffix='_LY', how='left').fillna(0)
                 
                 # Check for column existence
-                for col_suffix in ['_LW', '_LLW']:
+                for col_suffix in ['_LW', '_LLW', '_LY']:
                     if f'Spend{col_suffix}' not in camp_final.columns: camp_final[f'Spend{col_suffix}'] = 0.0
                     if f'GMV{col_suffix}' not in camp_final.columns: camp_final[f'GMV{col_suffix}'] = 0.0
                 
-                camp_final['COS'] = camp_final['Spend'] / camp_final['GMV'].replace(0,1)
-                camp_final['ROAS LW'] = camp_final['GMV_LW'] / camp_final['Spend_LW'].replace(0,1)
-                camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].replace(0,1)
-                camp_final['ROAS Trend'] = camp_final.apply(lambda x: "🟢" if (x['GMV']/x['Spend'].replace(0,1)) > x['ROAS LW'] else "🔴", axis=1)
+                # Safe calculations using lambda instead of .replace on scalars
+                camp_final['COS'] = camp_final.apply(lambda x: x['Spend'] / x['GMV'] if x['GMV'] != 0 else 0, axis=1)
+                camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].apply(lambda x: x if x != 0 else 1)
+                camp_final['Spend LW vs LY %'] = (camp_final['Spend_LW'] - camp_final['Spend_LY']) / camp_final['Spend_LY'].apply(lambda x: x if x != 0 else 1)
+                camp_final['GMV vs LLW %'] = (camp_final['GMV_LW'] - camp_final['GMV_LLW']) / camp_final['GMV_LLW'].apply(lambda x: x if x != 0 else 1)
+                
+                camp_final['ROAS LW'] = camp_final.apply(lambda x: x['GMV_LW'] / x['Spend_LW'] if x['Spend_LW'] != 0 else 0, axis=1)
+                
+                # Fixed ROAS Trend logic
+                def calc_roas_trend(row):
+                    cur_roas = row['GMV'] / row['Spend'] if row['Spend'] != 0 else 0
+                    prev_roas = row['GMV_LW'] / row['Spend_LW'] if row['Spend_LW'] != 0 else 0
+                    return "🟢" if cur_roas >= prev_roas else "🔴"
+                
+                camp_final['ROAS Trend'] = camp_final.apply(calc_roas_trend, axis=1)
 
-                st.dataframe(camp_final.reset_index()[['ZMSCampaign', 'Spend', 'Spend vs LLW %', 'GMV', 'COS', 'ROAS LW', 'ROAS Trend']], 
-                             column_config={
-                                 "Spend": "Spend CW (€)",
-                                 "Spend vs LLW %": st.column_config.NumberColumn("vs LLW %", format="%.1f%%"),
-                                 "GMV": "GMV CW (€)",
-                                 "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
-                                 "ROAS LW": st.column_config.NumberColumn("ROAS LW", format="%.2fx")
-                             }, hide_index=True, use_container_width=True)
+                st.dataframe(
+                    camp_final.reset_index()[['ZMSCampaign', 'Spend', 'Spend vs LLW %', 'GMV', 'COS', 'ROAS LW', 'ROAS Trend']], 
+                    column_config={
+                        "Spend": st.column_config.NumberColumn("Spend CW (€)", format="€%d"),
+                        "Spend vs LLW %": st.column_config.NumberColumn("vs LLW %", format="%.0f%%"),
+                        "GMV": st.column_config.NumberColumn("GMV CW (€)", format="€%d"),
+                        "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
+                        "ROAS LW": st.column_config.NumberColumn("ROAS LW", format="%.2fx")
+                    }, hide_index=True, use_container_width=True)
 
                 # --- ARTICLE ANALYTICS ---
                 st.markdown("---")
@@ -300,17 +320,22 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 art_df = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ArticleSKU').agg({
                     'GMV': 'sum', 'Spend': 'sum', 'Clicks': 'sum', 'Sold': 'sum', 'Wish': 'sum'
                 }).reset_index()
-                art_df['ROAS'] = art_df.apply(lambda x: x['GMV']/x['Spend'] if x['Spend'] > 0 else 0, axis=1)
-                art_df['COS'] = art_df.apply(lambda x: x['Spend']/x['GMV'] if x['GMV'] > 0 else 0, axis=1)
-                art_df['CVR'] = art_df.apply(lambda x: x['Sold']/x['Clicks'] if x['Clicks'] > 0 else 0, axis=1)
                 
-                st.dataframe(art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'CVR', 'Wish']].sort_values('ROAS', ascending=False),
-                             column_config={
-                                 "ROAS": st.column_config.NumberColumn("ROAS", format="%.2fx"),
-                                 "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
-                                 "CVR": st.column_config.NumberColumn("CVR", format="%.1%"),
-                                 "Wish": "Wishlists"
-                             }, hide_index=True, use_container_width=True)
+                # Rounding and Safe Division for Article Table
+                art_df['Article NMV €'] = art_df['GMV'].round(0).astype(int)
+                art_df['ROAS'] = art_df.apply(lambda x: x['GMV'] / x['Spend'] if x['Spend'] != 0 else 0, axis=1)
+                art_df['COS'] = art_df.apply(lambda x: x['Spend'] / x['GMV'] if x['GMV'] != 0 else 0, axis=1)
+                art_df['CVR'] = art_df.apply(lambda x: x['Sold'] / x['Clicks'] if x['Clicks'] != 0 else 0, axis=1)
+                
+                st.dataframe(
+                    art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'CVR', 'Wish']].sort_values('ROAS', ascending=False),
+                    column_config={
+                        "ROAS": st.column_config.NumberColumn("ROAS", format="%.2fx"),
+                        "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
+                        "Clicks": st.column_config.NumberColumn("Clicks", format="%d"),
+                        "CVR": st.column_config.NumberColumn("CVR", format="%.1%"),
+                        "Wish": st.column_config.NumberColumn("Wishlists", format="%d")
+                    }, hide_index=True, use_container_width=True)
             else:
                 st.warning("Please upload a marketing file containing at least two weeks of data.")
         else:
