@@ -109,6 +109,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     st.markdown("---")
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
 
+    # --- TAB 1: BRAND HEALTH ---
     with tab1:
         st.subheader("Health Tracker: YoY Growth (SEK)")
         c1, c2 = st.columns(2)
@@ -142,15 +143,11 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         
         # 1. Identify Inventory Columns
         inv_var_col = next((c for c in df_inv.columns if 'variant' in c.lower()), 'Article variant')
-        
-        # Target article_name as priority
         name_col = 'article_name' if 'article_name' in df_inv.columns else \
                    next((c for c in df_inv.columns if any(k in c.lower() for k in ['article name', 'product title', 'title']) and 'partner' not in c.lower()), None)
-        
         zfs_col = next((c for c in df_inv.columns if 'zfs' in c.lower()), None)
         pf_col = next((c for c in df_inv.columns if any(k in c.lower() for k in ['partner', 'pf']) and 'stock' in c.lower()), None)
         
-        # Safe Slicing
         cols_present = [c for c in [inv_var_col, name_col, zfs_col, pf_col] if c is not None and c in df_inv.columns]
         inv_map = df_inv[cols_present].drop_duplicates(inv_var_col)
         
@@ -158,7 +155,8 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         if zfs_col: inv_map[zfs_col] = inv_map[zfs_col].apply(clean_val).astype(int)
         if pf_col: inv_map[pf_col] = inv_map[pf_col].apply(clean_val).astype(int)
 
-        # 2. Aggregate Sales
+        # 2. Aggregate Sales (Fixing the Sold_Units KeyError by ensuring column exists)
+        # In your main logic loop, we defined 'Sold_Units'. We group by those here.
         cw_art = df_cw.groupby('Article variant')[['NMV_EUR', 'Sold_Units']].sum().reset_index()
         lw_art = df_lw.groupby('Article variant')[['NMV_EUR']].sum().reset_index().rename(columns={'NMV_EUR': 'NMV_LW'})
         
@@ -192,7 +190,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         final_headers = ['Status sales', 'Article variant', 'Article Name', 'Article NMV €', 'Article sold items', 'Article Stock ZFS', 'Article Stock PF']
         existing_headers = [h for h in final_headers if h in top.columns]
 
-        # Use Styler for red backgrounds with rounding logic in display
+        # Use Styler for red backgrounds
         st.dataframe(
             top[existing_headers].style.apply(lambda x: [
                 'background-color: #ffcccc' if (col in ['Article Stock ZFS', 'Article Stock PF'] and 0 < val < x['Article sold items']) else '' 
