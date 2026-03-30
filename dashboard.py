@@ -150,7 +150,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 use_container_width=True
             )
 
-    # --- TAB 2: ARTICLE PERFORMANCE & TRENDS ---
+    # --- TAB 2: ARTICLE PERFORMANCE & TRENDS (UPDATED AGGREGATION) ---
     with tab2:
         st.subheader("🏆 Top 50 Articles: Performance & Stock Alerts")
         
@@ -161,16 +161,29 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         zfs_col = next((c for c in df_inv.columns if 'zfs' in c.lower()), None)
         pf_col = next((c for c in df_inv.columns if any(k in c.lower() for k in ['partner', 'pf']) and 'stock' in c.lower()), None)
         
-        # Ensure we only slice columns that actually exist in df_inv
-        cols_present = [c for c in [inv_var_col, name_col, zfs_col, pf_col] if c is not None and c in df_inv.columns]
-        inv_map = df_inv[cols_present].drop_duplicates(inv_var_col)
+        # --- NEW AGGREGATION LOGIC: SUM STOCK PER VARIANT ---
+        # 1. Clean stock columns BEFORE grouping to ensure they are numeric
+        if zfs_col: df_inv[zfs_col] = df_inv[zfs_col].apply(clean_val)
+        if pf_col: df_inv[pf_col] = df_inv[pf_col].apply(clean_val)
         
-        if zfs_col: inv_map[zfs_col] = inv_map[zfs_col].apply(clean_val).astype(int)
-        if pf_col: inv_map[pf_col] = inv_map[pf_col].apply(clean_val).astype(int)
+        # 2. Group by Style/Variant and sum the stock across all sizes
+        agg_dict = {}
+        if name_col: agg_dict[name_col] = 'first' # Keep the descriptive name
+        if zfs_col: agg_dict[zfs_col] = 'sum'     # Sum all ZFS rows (sizes)
+        if pf_col: agg_dict[pf_col] = 'sum'       # Sum all PF rows (sizes)
+        
+        inv_map = df_inv.groupby(inv_var_col).agg(agg_dict).reset_index()
+        
+        # Force integer type for stock columns after summation
+        if zfs_col: inv_map[zfs_col] = inv_map[zfs_col].astype(int)
+        if pf_col: inv_map[pf_col] = inv_map[pf_col].astype(int)
 
-        # 2. Aggregate Sales (Fixing the KeyError)
-        # We use 'Sold_Units' which was defined in the main cleaning loop earlier in your script
-        cw_art = df_cw.groupby('Article variant')[['NMV_EUR', 'Sold_Units']].sum().reset_index()
+        # 2. Aggregate Sales (Already correctly grouping in your script)
+        target_cols = [c for c in ['NMV_EUR', 'Sold_Units'] if c in df_cw.columns]
+        cw_art = df_cw.groupby('Article variant')[target_cols].sum().reset_index()
+        
+        if 'Sold_Units' not in cw_art.columns: cw_art['Sold_Units'] = 0
+            
         lw_art = df_lw.groupby('Article variant')[['NMV_EUR']].sum().reset_index().rename(columns={'NMV_EUR': 'NMV_LW'})
         
         # 3. Merge & Status
@@ -217,6 +230,8 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             hide_index=True, 
             use_container_width=True
         )
+        
+        st.caption("💡 Cells highlighted in red indicate style stock levels (sum of all sizes) lower than this week's sales.")
 
     with tab3:
         if f_mkt:
