@@ -89,7 +89,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
 
-   with tab1:
+    with tab1:
         st.subheader("Health Tracker: YoY Growth (SEK)")
         c1, c2 = st.columns(2)
         for col, grp in zip([c1, c2], ['Brand', 'Article type']):
@@ -134,8 +134,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         cols_present = [c for c in [inv_var_col, name_col, zfs_col, pf_col] if c is not None and c in df_inv.columns]
         inv_map = df_inv[cols_present].drop_duplicates(inv_var_col)
         
-        if zfs_col: inv_map[zfs_col] = inv_map[zfs_col].apply(clean_val)
-        if pf_col: inv_map[pf_col] = inv_map[pf_col].apply(clean_val)
+        # --- ROUNDING LOGIC (INVENTORY DATA) ---
+        if zfs_col: inv_map[zfs_col] = inv_map[zfs_col].apply(clean_val).astype(int)
+        if pf_col: inv_map[pf_col] = inv_map[pf_col].apply(clean_val).astype(int)
 
         # 2. Aggregate Sales
         cw_art = df_cw.groupby('Article variant')[['NMV_EUR', 'Sold_Units']].sum().reset_index()
@@ -161,35 +162,27 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         }
         top = top.rename(columns={k: v for k, v in rename_dict.items() if k in top.columns})
         
+        # --- ROUNDING LOGIC (SALES DATA) ---
+        top['Article NMV €'] = top['Article NMV €'].round(0).astype(int)
+        top['Article sold items'] = top['Article sold items'].round(0).astype(int)
+        
         top = top.sort_values('Article NMV €', ascending=False).head(50)
 
-        # 4. Styling Function
-        def style_stock_alerts(df):
-            # Create a copy for styles
-            style_df = pd.DataFrame('', index=df.index, columns=df.columns)
-            threshold = df["Article sold items"]
-            
-            if "Article Stock ZFS" in df.columns:
-                style_df["Article Stock ZFS"] = df["Article Stock ZFS"].apply(lambda x: 'background-color: #ffcccc' if (0 < x < threshold.iloc[0]) else '')
-            if "Article Stock PF" in df.columns:
-                style_df["Article Stock PF"] = df["Article Stock PF"].apply(lambda x: 'background-color: #ffcccc' if (0 < x < threshold.iloc[0]) else '')
-            return style_df
-
-        # Filter display columns
+        # 4. Filter display columns
         final_headers = ['Status sales', 'Article variant', 'Article Name', 'Article NMV €', 'Article sold items', 'Article Stock ZFS', 'Article Stock PF']
         existing_headers = [h for h in final_headers if h in top.columns]
 
-        # Use Styler for red backgrounds
+        # Use Styler for red backgrounds with rounding logic in display
         st.dataframe(
             top[existing_headers].style.apply(lambda x: [
                 'background-color: #ffcccc' if (col in ['Article Stock ZFS', 'Article Stock PF'] and 0 < val < x['Article sold items']) else '' 
                 for col, val in x.items()
             ], axis=1),
             column_config={
-                "Article NMV €": st.column_config.NumberColumn("Article NMV €", format="€%.0f"),
-                "Article sold items": st.column_config.NumberColumn("Article sold items"),
-                "Article Stock ZFS": st.column_config.NumberColumn("Article Stock ZFS"),
-                "Article Stock PF": st.column_config.NumberColumn("Article Stock PF"),
+                "Article NMV €": st.column_config.NumberColumn("Article NMV €", format="€%d"),
+                "Article sold items": st.column_config.NumberColumn("Article sold items", format="%d"),
+                "Article Stock ZFS": st.column_config.NumberColumn("Article Stock ZFS", format="%d"),
+                "Article Stock PF": st.column_config.NumberColumn("Article Stock PF", format="%d"),
             }, 
             hide_index=True, 
             use_container_width=True
@@ -205,7 +198,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 mkt.columns = [c.replace(' ', '') for c in mkt.columns]
                 # Filter metrics and show
                 st.info("Marketing Data Active. Metrics processing...")
-                # (You can insert the previous marketing logic block here)
 
     with tab4:
         st.subheader("🔄 Z-Hybrid Performance")
