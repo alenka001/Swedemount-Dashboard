@@ -251,10 +251,29 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 st.dataframe(camp_final.reset_index(), use_container_width=True)
 
     with tab4:
-        st.subheader("🔄 Z-Hybrid Performance")
+        st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
         if f_hybrid:
             hy = load_csv_robust(f_hybrid)
-            st.dataframe(hy, use_container_width=True)
+            hy.columns = [c.strip() for c in hy.columns]
+            val_col, ly_col, date_col = 'Ordervärde ex.moms', 'Ordervärde ex. moms LY', 'Datum'
+            
+            if val_col in hy.columns:
+                hy_clean = hy[hy[date_col].str.lower() != 'total'].copy()
+                hy_clean['Sales_CW'] = hy_clean[val_col].apply(clean_val)
+                hy_clean['Sales_LY'] = hy_clean[ly_col].apply(clean_val) if ly_col in hy_clean.columns else 0.0
+                total_hybrid_cw = hy_clean['Sales_CW'].sum()
+                total_hybrid_ly = hy_clean['Sales_LY'].sum()
+                hybrid_share = (total_hybrid_cw / nmv_cw_sek) if nmv_cw_sek > 0 else 0
+                
+                h1, h2, h3 = st.columns(3)
+                h1.metric("Total Z-Hybrid Sales", f"{total_hybrid_cw:,.0f} kr")
+                h2.metric("Total Zalando Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
+                h3.metric("Andel Z-hybrid (Share)", f"{hybrid_share:.1%}", delta=f"{((total_hybrid_cw/total_hybrid_ly)-1):.1%} YoY" if total_hybrid_ly > 0 else None)
+                
+                st.markdown("---")
+                st.write("**Daily Comparison (SEK)**")
+                daily = hy_clean.groupby([date_col, 'Veckodag'])[['Sales_CW', 'Sales_LY']].sum().reset_index()
+                st.dataframe(daily, hide_index=True, use_container_width=True, column_config={"Sales_CW": st.column_config.NumberColumn("Current Year (kr)", format="%d kr"), "Sales_LY": st.column_config.NumberColumn("Last Year (kr)", format="%d kr")})
 
 else:
     st.info("Awaiting file uploads 1-4 in the sidebar to generate board.")
