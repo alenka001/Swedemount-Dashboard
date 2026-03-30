@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 
 # Silence technical warnings
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-
+F
 # --- SET PAGE CONFIG ---
 st.set_page_config(page_title="Weekly Strategic Board", layout="wide", page_icon="📊")
 
@@ -280,16 +280,31 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
                 # --- TOP KPI SUMMARY ---
                 st.subheader(f"Marketing Performance Week {cw_w}")
-                mk1, mk2, mk3, mk4, mk5 = st.columns(5)
                 
+                # We use 6 columns now to include the new GMV summary
+                mk1, mk2, mk3, mk4, mk5, mk6 = st.columns(6)
+                
+                # 1. Ad Spend
                 mk1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}", 
                            delta=f"LW: {pct_change(s_cw['Spend'], s_lw['Spend']):.1%}")
-                mk2.metric("ROAS", f"{s_cw['ROAS']:.2f}x", 
+                
+                # 2. Total GMV (The new addition)
+                mk2.metric("Total GMV", f"€{s_cw['GMV']:,.0f}", 
+                           delta=f"LW: {pct_change(s_cw['GMV'], s_lw['GMV']):.1%}")
+                
+                # 3. ROAS
+                mk3.metric("ROAS", f"{s_cw['ROAS']:.2f}x", 
                            delta=f"LW: {pct_change(s_cw['ROAS'], s_lw['ROAS']):.1%}")
-                mk3.metric("COS", f"{s_cw['COS']:.1%}", 
+                
+                # 4. COS
+                mk4.metric("COS", f"{s_cw['COS']:.1%}", 
                            delta=f"LW: {(s_cw['COS'] - s_lw['COS']):.1%}", delta_color="inverse")
-                mk4.metric("Blended COS", f"{blended_cos_cw:.1%}", help="Ad Spend / Total Marketplace NMV")
-                mk5.metric("Impressions", f"{s_cw['Impressions']:,.0f}", 
+                
+                # 5. Blended COS
+                mk5.metric("Blended COS", f"{blended_cos_cw:.1%}", help="Ad Spend / Total Marketplace NMV")
+                
+                # 6. Impressions
+                mk6.metric("Impressions", f"{s_cw['Impressions']:,.0f}", 
                            delta=f"LY: {pct_change(s_cw['Impressions'], s_ly['Impressions']):.1%}")
 
                 # --- TREND CHART ---
