@@ -9,6 +9,19 @@ from plotly.subplots import make_subplots
 # Silence technical warnings
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
+# Pre-clean primary sales data
+    for df in [df_cw, df_lw, df_ly]:
+        # Ensure 'Sold articles' exists even if there's a trailing space in CSV
+        src_sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), None)
+        
+        df['NMV_EUR'] = df['NMV'].apply(clean_val)
+        if src_sold_col:
+            df['Sold_Units'] = df[src_sold_col].apply(clean_val)
+        else:
+            df['Sold_Units'] = 0.0  # Fallback if column is missing
+            
+        df['NMV_SEK'] = df['NMV_EUR'] * ex_rate
+
 # --- SET PAGE CONFIG ---
 st.set_page_config(page_title="Weekly Strategic Board", layout="wide", page_icon="📊")
 
