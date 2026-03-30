@@ -85,4 +85,185 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     st.title("🚀 Weekly Strategic Marketplace Board")
 
     # ROW 1: EUR
-    st.subheader("🇪🇺
+    st.subheader("🇪🇺 Row 1: EUR Performance")
+    e1, e2, e3 = st.columns(3)
+    e1.metric("Current EUR", f"€{nmv_cw_sek/ex_rate:,.0f}")
+    e2.metric("LW EUR", f"€{nmv_lw_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
+    e3.metric("LY EUR", f"€{nmv_ly_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
+
+    # ROW 2: SEK
+    st.subheader("🇸🇪 Row 2: SEK Performance & Target Gaps")
+    s1, s2, s3, s4, s5 = st.columns(5)
+    s1.metric("LW SEK", f"{nmv_lw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
+    s2.metric("LY SEK", f"{nmv_ly_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
+    
+    b_gap = (nmv_cw_sek / weekly_budget_sek) - 1
+    s3.metric("vs Budget", f"{weekly_budget_sek:,.0f} kr", delta=f"{b_gap:.1%} {'Ahead' if b_gap > 0 else 'Behind'}")
+    
+    p_gap = (nmv_cw_sek / weekly_prognos_sek) - 1
+    s4.metric("vs Prognos", f"{weekly_prognos_sek:,.0f} kr", delta=f"{p_gap:.1%} {'Ahead' if p_gap > 0 else 'Behind'}")
+    s5.metric("Current Total", f"{nmv_cw_sek:,.0f} kr")
+
+    st.markdown("---")
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
+
+    with tab1:
+        st.subheader("Health Tracker: YoY Growth (SEK)")
+        c1, c2 = st.columns(2)
+        for col, grp in zip([c1, c2], ['Brand', 'Category']):
+            cw_g = df_cw.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'CW_kr'})
+            ly_g = df_ly.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'LY_kr'})
+            m = cw_g.merge(ly_g, on=grp, how='left').fillna(0)
+            m['Growth %'] = (m['CW_kr'] - m['LY_kr']) / m['LY_kr'].replace(0, 1)
+            m['Status'] = m['Growth %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
+            col.dataframe(m.sort_values('CW_kr', ascending=False), hide_index=True, use_container_width=True)
+
+    with tab2:
+        st.subheader("Top 50 Articles (Compressed)")
+        cw_art = df_cw.groupby(['Brand', 'Article variant', 'Zalando article variant'])[['NMV_EUR', 'Sold articles']].sum().reset_index()
+        lw_art = df_lw.groupby('Article variant')['NMV_EUR'].sum().reset_index()
+        top = cw_art.merge(lw_art, on='Article variant', how='left', suffixes=('_CW', '_LW')).fillna(0)
+        top = top.sort_values('NMV_EUR_CW', ascending=False).head(50)
+        st.dataframe(top, hide_index=True, use_container_width=True)
+
+    with tab3:
+        if f_mkt:
+            mkt = load_csv_robust(f_mkt)
+            mkt.columns = [c.replace(' ', '') for c in mkt.columns]
+            
+            # --- MAPPING & CLEANING ---
+            m_cols = {'Spend': 'Budgetspent', 'GMV': 'GMV', 'Wish': 'Addtowishlist', 'Clicks': 'Clicks', 'Sold': 'Itemssold', 'Impressions': 'Impressions'}
+            for k, v in m_cols.items():
+                if v in mkt.columns: mkt[k] = mkt[v].apply(clean_val)
+                else: mkt[k] = 0.0
+            
+            mkt['Week'] = mkt['Week'].apply(clean_val).astype(int)
+            mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2024
+            
+            weeks = sorted(mkt['Week'].unique())
+            years = sorted(mkt['Year'].unique())
+            
+            if len(weeks) >= 2:
+                cw_w, lw_w = weeks[-1], weeks[-2]
+                llw_w = weeks[-3] if len(weeks) > 2 else None
+                curr_yr = years[-1]
+                last_yr = years[-2] if len(years) > 1 else None
+                
+                # Logic to grab stats
+                def get_mkt_stats(y, w):
+                    subset = mkt[(mkt['Year'] == y) & (mkt['Week'] == w)]
+                    s = subset[['Spend', 'GMV', 'Wish', 'Clicks', 'Sold', 'Impressions']].sum()
+                    s['ROAS'] = s['GMV'] / s['Spend'] if s['Spend'] > 0 else 0
+                    return s
+
+                s_cw = get_mkt_stats(curr_yr, cw_w)
+                s_lw = get_mkt_stats(curr_yr, lw_w)
+                s_ly = get_mkt_stats(last_yr, cw_w) if last_yr else s_cw * 0
+                
+                def pct_change(c, p): return ((c/p)-1) if p > 0 else 0
+
+                # --- TOP KPI SUMMARY ---
+                st.subheader(f"Marketing Performance Week {cw_w}")
+                mk1, mk2, mk3, mk4 = st.columns(4)
+                
+                mk1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}", 
+                           delta=f"LW: {pct_change(s_cw['Spend'], s_lw['Spend']):.1%} | LY: {pct_change(s_cw['Spend'], s_ly['Spend']):.1%}", delta_color="inverse")
+                mk2.metric("Total GMV", f"€{s_cw['GMV']:,.0f}", 
+                           delta=f"LW: {pct_change(s_cw['GMV'], s_lw['GMV']):.1%} | LY: {pct_change(s_cw['GMV'], s_ly['GMV']):.1%}")
+                mk3.metric("ROAS", f"{s_cw['ROAS']:.2f}x", 
+                           delta=f"LW: {pct_change(s_cw['ROAS'], s_lw['ROAS']):.1%} | LY: {pct_change(s_cw['ROAS'], s_ly['ROAS']):.1%}")
+                mk4.metric("Impressions", f"{s_cw['Impressions']:,.0f}", 
+                           delta=f"LW: {pct_change(s_cw['Impressions'], s_lw['Impressions']):.1%} | LY: {pct_change(s_cw['Impressions'], s_ly['Impressions']):.1%}")
+
+                # --- TREND CHART ---
+                st.markdown("---")
+                trend_df = mkt[mkt['Year'] == curr_yr].groupby('Week').agg({'Spend':'sum', 'GMV':'sum'}).reset_index()
+                trend_df['ROAS'] = trend_df['GMV'] / trend_df['Spend']
+                
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['Spend'], name="Spend", marker_color='#ff4b4b'), secondary_y=False)
+                fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['GMV'], name="GMV", marker_color='#0068c9', opacity=0.6), secondary_y=False)
+                fig.add_trace(go.Scatter(x=trend_df['Week'], y=trend_df['ROAS'], name="ROAS", line=dict(color='#2ecc71', width=3)), secondary_y=True)
+                fig.update_layout(title="Marketing Efficiency Trend", barmode='group', height=350, margin=dict(l=0,r=0,t=30,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+
+                # --- CAMPAIGN PERFORMANCE ---
+                st.markdown("---")
+                st.subheader("📣 Campaign Analytics (WoW & YoY Compare)")
+                
+                def get_camp_data(y, w):
+                    return mkt[(mkt['Year']==y) & (mkt['Week']==w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
+
+                c_cw = get_camp_data(curr_yr, cw_w)
+                c_lw = get_camp_data(curr_yr, lw_w)
+                c_llw = get_camp_data(curr_yr, llw_w) if llw_w else pd.DataFrame()
+                c_ly = get_camp_data(last_yr, cw_w) if last_yr else pd.DataFrame()
+
+                camp_final = c_cw.join(c_lw, rsuffix='_LW').join(c_llw, rsuffix='_LLW').join(c_ly, rsuffix='_LY').fillna(0)
+                
+                camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].replace(0,1)
+                camp_final['Spend LW vs LY %'] = (camp_final['Spend_LW'] - camp_final['Spend_LY']) / camp_final['Spend_LY'].replace(0,1)
+                
+                camp_final['GMV vs LLW %'] = (camp_final['GMV_LW'] - camp_final['GMV_LLW']) / camp_final['GMV_LLW'].replace(0,1)
+                camp_final['GMV LW vs LY %'] = (camp_final['GMV_LW'] - camp_final['GMV_LY']) / camp_final['GMV_LY'].replace(0,1)
+                
+                camp_final['ROAS LW'] = camp_final['GMV_LW'] / camp_final['Spend_LW'].replace(0,1)
+                camp_final['ROAS LLW'] = camp_final['GMV_LLW'] / camp_final['Spend_LLW'].replace(0,1)
+                camp_final['ROAS Trend'] = camp_final.apply(lambda x: "🟢" if x['ROAS LW'] > x['ROAS LLW'] else "🔴", axis=1)
+
+                st.dataframe(camp_final.reset_index()[['ZMSCampaign', 'Spend_LW', 'Spend vs LLW %', 'Spend LW vs LY %', 'GMV_LW', 'GMV vs LLW %', 'GMV LW vs LY %', 'ROAS LW', 'ROAS Trend']], 
+                             column_config={
+                                 "Spend_LW": "Spend LW (€)",
+                                 "Spend vs LLW %": st.column_config.NumberColumn("vs LLW %", format="%.1f%%"),
+                                 "Spend LW vs LY %": st.column_config.NumberColumn("vs LY %", format="%.1f%%"),
+                                 "GMV_LW": "GMV LW (€)",
+                                 "GMV vs LLW %": st.column_config.NumberColumn("GMV vs LLW %", format="%.1f%%"),
+                                 "ROAS LW": st.column_config.NumberColumn("ROAS LW", format="%.2fx")
+                             }, hide_index=True, use_container_width=True)
+
+                # --- ARTICLE ANALYTICS ---
+                st.markdown("---")
+                st.subheader("📦 Article SKU Performance (Current Week)")
+                art_df = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ArticleSKU').agg({
+                    'GMV': 'sum', 'Spend': 'sum', 'Clicks': 'sum', 'Sold': 'sum', 'Wish': 'sum'
+                }).reset_index()
+                art_df['ROAS'] = art_df['GMV'] / art_df['Spend'].replace(0,1)
+                art_df['CVR'] = art_df['Sold'] / art_df['Clicks'].replace(0,1)
+                
+                st.dataframe(art_df[['ArticleSKU', 'ROAS', 'Clicks', 'CVR', 'Wish']].sort_values('ROAS', ascending=False),
+                             column_config={
+                                 "ROAS": st.column_config.NumberColumn("ROAS", format="%.2fx"),
+                                 "CVR": st.column_config.NumberColumn("CVR", format="%.1%"),
+                                 "Wish": "Wishlists"
+                             }, hide_index=True, use_container_width=True)
+            else:
+                st.warning("Insufficient week data in marketing file.")
+        else:
+            st.info("Upload Marketing CSV to see campaign and article depth.")
+
+    with tab4:
+        st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
+        if f_hybrid:
+            hy = load_csv_robust(f_hybrid)
+            hy.columns = [c.strip() for c in hy.columns]
+            val_col, ly_col, date_col = 'Ordervärde ex.moms', 'Ordervärde ex. moms LY', 'Datum'
+            
+            if val_col in hy.columns:
+                hy_clean = hy[hy[date_col].str.lower() != 'total'].copy()
+                hy_clean['Sales_CW'] = hy_clean[val_col].apply(clean_val)
+                hy_clean['Sales_LY'] = hy_clean[ly_col].apply(clean_val) if ly_col in hy_clean.columns else 0.0
+                total_hybrid_cw = hy_clean['Sales_CW'].sum()
+                total_hybrid_ly = hy_clean['Sales_LY'].sum()
+                hybrid_share = (total_hybrid_cw / nmv_cw_sek) if nmv_cw_sek > 0 else 0
+                
+                h1, h2, h3 = st.columns(3)
+                h1.metric("Total Z-Hybrid Sales", f"{total_hybrid_cw:,.0f} kr")
+                h2.metric("Total Zalando Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
+                h3.metric("Andel Z-hybrid (Share)", f"{hybrid_share:.1%}", delta=f"{((total_hybrid_cw/total_hybrid_ly)-1):.1%} YoY" if total_hybrid_ly > 0 else None)
+                
+                st.markdown("---")
+                st.write("**Daily Comparison (SEK)**")
+                daily = hy_clean.groupby([date_col, 'Veckodag'])[['Sales_CW', 'Sales_LY']].sum().reset_index()
+                st.dataframe(daily, hide_index=True, use_container_width=True, column_config={"Sales_CW": st.column_config.NumberColumn("Current Year (kr)", format="%d kr"), "Sales_LY": st.column_config.NumberColumn("Last Year (kr)", format="%d kr")})
+else:
+    st.info("Awaiting file uploads in the sidebar.")
