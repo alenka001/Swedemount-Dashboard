@@ -148,15 +148,15 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         zfs_col = next((c for c in df_inv.columns if 'zfs' in c.lower()), None)
         pf_col = next((c for c in df_inv.columns if any(k in c.lower() for k in ['partner', 'pf']) and 'stock' in c.lower()), None)
         
+        # Ensure we only slice columns that actually exist in df_inv
         cols_present = [c for c in [inv_var_col, name_col, zfs_col, pf_col] if c is not None and c in df_inv.columns]
         inv_map = df_inv[cols_present].drop_duplicates(inv_var_col)
         
-        # --- ROUNDING LOGIC (INVENTORY DATA) ---
         if zfs_col: inv_map[zfs_col] = inv_map[zfs_col].apply(clean_val).astype(int)
         if pf_col: inv_map[pf_col] = inv_map[pf_col].apply(clean_val).astype(int)
 
-        # 2. Aggregate Sales (Fixing the Sold_Units KeyError by ensuring column exists)
-        # In your main logic loop, we defined 'Sold_Units'. We group by those here.
+        # 2. Aggregate Sales (Fixing the KeyError)
+        # We use 'Sold_Units' which was defined in the main cleaning loop earlier in your script
         cw_art = df_cw.groupby('Article variant')[['NMV_EUR', 'Sold_Units']].sum().reset_index()
         lw_art = df_lw.groupby('Article variant')[['NMV_EUR']].sum().reset_index().rename(columns={'NMV_EUR': 'NMV_LW'})
         
@@ -170,7 +170,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         top['Status sales'] = top.apply(get_status_icon, axis=1)
         top = top.merge(inv_map, left_on='Article variant', right_on=inv_var_col, how='left')
         
-        # Rename for output
+        # Rename for output display
         rename_dict = {
             name_col: "Article Name",
             zfs_col: "Article Stock ZFS",
@@ -180,17 +180,16 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         }
         top = top.rename(columns={k: v for k, v in rename_dict.items() if k in top.columns})
         
-        # --- ROUNDING LOGIC (SALES DATA) ---
+        # Round values for clean presentation
         top['Article NMV €'] = top['Article NMV €'].round(0).astype(int)
         top['Article sold items'] = top['Article sold items'].round(0).astype(int)
         
         top = top.sort_values('Article NMV €', ascending=False).head(50)
 
-        # 4. Filter display columns
+        # 4. Display
         final_headers = ['Status sales', 'Article variant', 'Article Name', 'Article NMV €', 'Article sold items', 'Article Stock ZFS', 'Article Stock PF']
         existing_headers = [h for h in final_headers if h in top.columns]
 
-        # Use Styler for red backgrounds
         st.dataframe(
             top[existing_headers].style.apply(lambda x: [
                 'background-color: #ffcccc' if (col in ['Article Stock ZFS', 'Article Stock PF'] and 0 < val < x['Article sold items']) else '' 
@@ -205,8 +204,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             hide_index=True, 
             use_container_width=True
         )
-        
-        st.caption("💡 Cells highlighted in red indicate stock levels are currently lower than this week's sales volume.")
 
     with tab3:
         if f_mkt:
