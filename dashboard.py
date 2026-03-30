@@ -121,10 +121,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     st.markdown("---")
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
-    
-    # ... Rest of your tab logic (Tab 1, 2, 3, 4) should follow here
-else:
-    st.info("Awaiting file uploads in the sidebar.")
 
     # --- TAB 1: BRAND HEALTH ---
     with tab1:
