@@ -125,7 +125,8 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         top = cw_art.merge(lw_art, on='Article variant', how='left', suffixes=('_CW', '_LW')).fillna(0)
         top = top.sort_values('NMV_EUR_CW', ascending=False).head(50)
         st.dataframe(top, hide_index=True, use_container_width=True)
-with tab3:
+
+    with tab3:
         if f_mkt:
             mkt = load_csv_robust(f_mkt)
             mkt.columns = [c.replace(' ', '') for c in mkt.columns]
@@ -139,7 +140,6 @@ with tab3:
             
             mkt['ZMSCampaign'] = mkt['ZMSCampaign'] if 'ZMSCampaign' in mkt.columns else (mkt['Campaign'] if 'Campaign' in mkt.columns else "Unknown")
             mkt['ArticleSKU'] = mkt['ArticleSKU'] if 'ArticleSKU' in mkt.columns else (mkt['SKU'] if 'SKU' in mkt.columns else "Unknown")
-            
             mkt['Week'] = mkt['Week'].apply(clean_val).astype(int)
             mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2024
             
@@ -167,7 +167,6 @@ with tab3:
                 s_ly = get_mkt_stats(last_yr, cw_w) if last_yr else s_cw * 0
                 
                 blended_cos_cw = s_cw['Spend'] / total_sales_eur if total_sales_eur > 0 else 0
-                
                 def pct_change(c, p): return ((c/p)-1) if p > 0 else 0
 
                 # --- TOP KPI SUMMARY ---
@@ -175,14 +174,14 @@ with tab3:
                 mk1, mk2, mk3, mk4, mk5 = st.columns(5)
                 
                 mk1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}", 
-                           delta=f"LW: {pct_change(s_cw['Spend'], s_lw['Spend']):.1%}")
+                           delta=f"LW: {pct_change(s_cw['Spend'], s_lw['Spend']):.1%} | LY: {pct_change(s_cw['Spend'], s_ly['Spend']):.1%}", delta_color="inverse")
                 mk2.metric("ROAS", f"{s_cw['ROAS']:.2f}x", 
                            delta=f"LW: {pct_change(s_cw['ROAS'], s_lw['ROAS']):.1%}")
                 mk3.metric("COS", f"{s_cw['COS']:.1%}", 
                            delta=f"LW: {(s_cw['COS'] - s_lw['COS']):.1%}", delta_color="inverse")
                 mk4.metric("Blended COS", f"{blended_cos_cw:.1%}", help="Ad Spend / Total Marketplace NMV")
                 mk5.metric("Impressions", f"{s_cw['Impressions']:,.0f}", 
-                           delta=f"LY: {pct_change(s_cw['Impressions'], s_ly['Impressions']):.1%}")
+                           delta=f"LW: {pct_change(s_cw['Impressions'], s_lw['Impressions']):.1%} | LY: {pct_change(s_cw['Impressions'], s_ly['Impressions']):.1%}")
 
                 # --- TREND CHART ---
                 st.markdown("---")
@@ -198,7 +197,7 @@ with tab3:
 
                 # --- CAMPAIGN PERFORMANCE ---
                 st.markdown("---")
-                st.subheader("📣 Campaign Analytics (with COS)")
+                st.subheader("📣 Campaign Analytics (WoW & YoY Compare)")
                 
                 def get_camp_data(y, w):
                     if w is None: return pd.DataFrame(columns=['Spend', 'GMV'])
@@ -207,17 +206,23 @@ with tab3:
                 c_cw = get_camp_data(curr_yr, cw_w)
                 c_lw = get_camp_data(curr_yr, lw_w)
                 c_llw = get_camp_data(curr_yr, llw_w)
+                c_ly = get_camp_data(last_yr, cw_w)
 
-                camp_final = c_cw.join(c_lw, rsuffix='_LW', how='left').join(c_llw, rsuffix='_LLW', how='left').fillna(0)
+                camp_final = c_cw.join(c_lw, rsuffix='_LW', how='left').join(c_llw, rsuffix='_LLW', how='left').join(c_ly, rsuffix='_LY', how='left').fillna(0)
                 
-                # Check for column existence
-                for col_suffix in ['_LW', '_LLW']:
+                # Check for column existence before math to prevent KeyErrors
+                for col_suffix in ['_LW', '_LLW', '_LY']:
                     if f'Spend{col_suffix}' not in camp_final.columns: camp_final[f'Spend{col_suffix}'] = 0.0
                     if f'GMV{col_suffix}' not in camp_final.columns: camp_final[f'GMV{col_suffix}'] = 0.0
                 
                 camp_final['COS'] = camp_final['Spend'] / camp_final['GMV'].replace(0,1)
-                camp_final['ROAS LW'] = camp_final['GMV_LW'] / camp_final['Spend_LW'].replace(0,1)
                 camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].replace(0,1)
+                camp_final['Spend LW vs LY %'] = (camp_final['Spend_LW'] - camp_final['Spend_LY']) / camp_final['Spend_LY'].replace(0,1)
+                camp_final['GMV vs LLW %'] = (camp_final['GMV_LW'] - camp_final['GMV_LLW']) / camp_final['GMV_LLW'].replace(0,1)
+                camp_final['GMV LW vs LY %'] = (camp_final['GMV_LW'] - camp_final['GMV_LY']) / camp_final['GMV_LY'].replace(0,1)
+                
+                camp_final['ROAS LW'] = camp_final['GMV_LW'] / camp_final['Spend_LW'].replace(0,1)
+                camp_final['ROAS LLW'] = camp_final['GMV_LLW'] / camp_final['Spend_LLW'].replace(0,1)
                 camp_final['ROAS Trend'] = camp_final.apply(lambda x: "🟢" if (x['GMV']/x['Spend'].replace(0,1)) > x['ROAS LW'] else "🔴", axis=1)
 
                 st.dataframe(camp_final.reset_index()[['ZMSCampaign', 'Spend', 'Spend vs LLW %', 'GMV', 'COS', 'ROAS LW', 'ROAS Trend']], 
@@ -237,18 +242,20 @@ with tab3:
                 }).reset_index()
                 art_df['ROAS'] = art_df['GMV'] / art_df['Spend'].replace(0,1)
                 art_df['COS'] = art_df['Spend'] / art_df['GMV'].replace(0,1)
+                art_df['CVR'] = art_df['Sold'] / art_df['Clicks'].replace(0,1)
                 
-                st.dataframe(art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'Wish']].sort_values('ROAS', ascending=False),
+                st.dataframe(art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'CVR', 'Wish']].sort_values('ROAS', ascending=False),
                              column_config={
                                  "ROAS": st.column_config.NumberColumn("ROAS", format="%.2fx"),
                                  "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
+                                 "CVR": st.column_config.NumberColumn("CVR", format="%.1%"),
                                  "Wish": "Wishlists"
                              }, hide_index=True, use_container_width=True)
             else:
-                st.warning("Insufficient week data in marketing file.")
+                st.warning("Please upload a marketing file containing at least two weeks of data.")
         else:
-            st.info("Upload Marketing CSV in the sidebar.")
-    
+            st.info("Upload Marketing CSV in the sidebar to view performance depth.")
+
     with tab4:
         st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
         if f_hybrid:
