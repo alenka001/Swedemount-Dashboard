@@ -89,16 +89,32 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
 
-    with tab1:
+   with tab1:
         st.subheader("Health Tracker: YoY Growth (SEK)")
         c1, c2 = st.columns(2)
         for col, grp in zip([c1, c2], ['Brand', 'Article type']):
             cw_g = df_cw.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'CW_kr'})
             ly_g = df_ly.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'LY_kr'})
             m = cw_g.merge(ly_g, on=grp, how='left').fillna(0)
+            
+            # --- ROUNDING LOGIC (DATA) ---
+            m['CW_kr'] = m['CW_kr'].round(0).astype(int)
+            m['LY_kr'] = m['LY_kr'].round(0).astype(int)
             m['Growth %'] = (m['CW_kr'] - m['LY_kr']) / m['LY_kr'].replace(0, 1)
+            
             m['Status'] = m['Growth %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
-            col.dataframe(m.sort_values('CW_kr', ascending=False), hide_index=True, use_container_width=True)
+            
+            # --- ROUNDING LOGIC (DISPLAY) ---
+            col.dataframe(
+                m.sort_values('CW_kr', ascending=False), 
+                column_config={
+                    "CW_kr": st.column_config.NumberColumn("CW (kr)", format="%d kr"),
+                    "LY_kr": st.column_config.NumberColumn("LY (kr)", format="%d kr"),
+                    "Growth %": st.column_config.NumberColumn("Growth %", format="%.0f%%")
+                },
+                hide_index=True, 
+                use_container_width=True
+            )
 
     # --- TAB 2: ARTICLE PERFORMANCE & TRENDS ---
     with tab2:
