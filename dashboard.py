@@ -8,7 +8,7 @@ from plotly.subplots import make_subplots
 
 # Silence technical warnings
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
-F
+
 # --- SET PAGE CONFIG ---
 st.set_page_config(page_title="Weekly Strategic Board", layout="wide", page_icon="📊")
 
