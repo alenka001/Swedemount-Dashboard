@@ -9,19 +9,6 @@ from plotly.subplots import make_subplots
 # Silence technical warnings
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
-# Pre-clean primary sales data
-    for df in [df_cw, df_lw, df_ly]:
-        # Ensure 'Sold articles' exists even if there's a trailing space in CSV
-        src_sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), None)
-        
-        df['NMV_EUR'] = df['NMV'].apply(clean_val)
-        if src_sold_col:
-            df['Sold_Units'] = df[src_sold_col].apply(clean_val)
-        else:
-            df['Sold_Units'] = 0.0  # Fallback if column is missing
-            
-        df['NMV_SEK'] = df['NMV_EUR'] * ex_rate
-
 # --- SET PAGE CONFIG ---
 st.set_page_config(page_title="Weekly Strategic Board", layout="wide", page_icon="📊")
 
@@ -86,13 +73,26 @@ f_hybrid = st.sidebar.file_uploader("6. Z-Hybrid Daily Sales (CSV)", type="csv")
 
 # --- MAIN LOGIC ---
 if all([f_cw, f_lw, f_ly, f_inv]):
-    df_cw = load_csv_robust(f_cw); df_lw = load_csv_robust(f_lw)
-    df_ly = load_csv_robust(f_ly); df_inv = load_csv_robust(f_inv)
+    df_cw = load_csv_robust(f_cw)
+    df_lw = load_csv_robust(f_lw)
+    df_ly = load_csv_robust(f_ly)
+    df_inv = load_csv_robust(f_inv)
     
+    # --- PRE-CLEAN PRIMARY SALES DATA ---
+    # This block ensures 'Sold_Units' and rounded NMV exist for all calculations
     for df in [df_cw, df_lw, df_ly]:
+        # Handle fuzzy matching for "Sold articles" column name
+        src_sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), None)
+        
         df['NMV_EUR'] = df['NMV'].apply(clean_val)
+        if src_sold_col:
+            df['Sold_Units'] = df[src_sold_col].apply(clean_val)
+        else:
+            df['Sold_Units'] = 0.0
+            
         df['NMV_SEK'] = df['NMV_EUR'] * ex_rate
 
+    # Calculate Top-Level SEK Metrics
     nmv_cw_sek = df_cw['NMV_SEK'].sum()
     nmv_lw_sek = df_lw['NMV_SEK'].sum()
     nmv_ly_sek = df_ly['NMV_SEK'].sum()
@@ -121,6 +121,10 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     st.markdown("---")
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
+    
+    # ... Rest of your tab logic (Tab 1, 2, 3, 4) should follow here
+else:
+    st.info("Awaiting file uploads in the sidebar.")
 
     # --- TAB 1: BRAND HEALTH ---
     with tab1:
