@@ -92,7 +92,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     with tab1:
         st.subheader("Health Tracker: YoY Growth (SEK)")
         c1, c2 = st.columns(2)
-        for col, grp in zip([c1, c2], ['Brand', 'Category']):
+        for col, grp in zip([c1, c2], ['Brand', 'Article type']):
             cw_g = df_cw.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'CW_kr'})
             ly_g = df_ly.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'LY_kr'})
             m = cw_g.merge(ly_g, on=grp, how='left').fillna(0)
