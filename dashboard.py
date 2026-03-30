@@ -134,8 +134,13 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             # --- MAPPING & CLEANING ---
             m_cols = {'Spend': 'Budgetspent', 'GMV': 'GMV', 'Wish': 'Addtowishlist', 'Clicks': 'Clicks', 'Sold': 'Itemssold', 'Impressions': 'Impressions'}
             for k, v in m_cols.items():
-                if v in mkt.columns: mkt[k] = mkt[v].apply(clean_val)
+                target_col = v if v in mkt.columns else next((c for c in mkt.columns if k.lower() in c.lower()), None)
+                if target_col: mkt[k] = mkt[target_col].apply(clean_val)
                 else: mkt[k] = 0.0
+            
+            # Ensure Campaign and SKU columns exist
+            mkt['ZMSCampaign'] = mkt['ZMSCampaign'] if 'ZMSCampaign' in mkt.columns else (mkt['Campaign'] if 'Campaign' in mkt.columns else "Unknown")
+            mkt['ArticleSKU'] = mkt['ArticleSKU'] if 'ArticleSKU' in mkt.columns else (mkt['SKU'] if 'SKU' in mkt.columns else "Unknown")
             
             mkt['Week'] = mkt['Week'].apply(clean_val).astype(int)
             mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2024
@@ -149,7 +154,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 curr_yr = years[-1]
                 last_yr = years[-2] if len(years) > 1 else None
                 
-                # Logic to grab stats
                 def get_mkt_stats(y, w):
                     subset = mkt[(mkt['Year'] == y) & (mkt['Week'] == w)]
                     s = subset[['Spend', 'GMV', 'Wish', 'Clicks', 'Sold', 'Impressions']].sum()
@@ -192,18 +196,24 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 st.subheader("📣 Campaign Analytics (WoW & YoY Compare)")
                 
                 def get_camp_data(y, w):
+                    if w is None: return pd.DataFrame(columns=['Spend', 'GMV'])
                     return mkt[(mkt['Year']==y) & (mkt['Week']==w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
 
                 c_cw = get_camp_data(curr_yr, cw_w)
                 c_lw = get_camp_data(curr_yr, lw_w)
-                c_llw = get_camp_data(curr_yr, llw_w) if llw_w else pd.DataFrame()
-                c_ly = get_camp_data(last_yr, cw_w) if last_yr else pd.DataFrame()
+                c_llw = get_camp_data(curr_yr, llw_w)
+                c_ly = get_camp_data(last_yr, cw_w)
 
-                camp_final = c_cw.join(c_lw, rsuffix='_LW').join(c_llw, rsuffix='_LLW').join(c_ly, rsuffix='_LY').fillna(0)
+                # Robust join that ensures columns exist even if data is missing
+                camp_final = c_cw.join(c_lw, rsuffix='_LW', how='left').join(c_llw, rsuffix='_LLW', how='left').join(c_ly, rsuffix='_LY', how='left').fillna(0)
+                
+                # Check for column existence before math to prevent KeyErrors
+                for col_suffix in ['_LW', '_LLW', '_LY']:
+                    if f'Spend{col_suffix}' not in camp_final.columns: camp_final[f'Spend{col_suffix}'] = 0.0
+                    if f'GMV{col_suffix}' not in camp_final.columns: camp_final[f'GMV{col_suffix}'] = 0.0
                 
                 camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].replace(0,1)
                 camp_final['Spend LW vs LY %'] = (camp_final['Spend_LW'] - camp_final['Spend_LY']) / camp_final['Spend_LY'].replace(0,1)
-                
                 camp_final['GMV vs LLW %'] = (camp_final['GMV_LW'] - camp_final['GMV_LLW']) / camp_final['GMV_LLW'].replace(0,1)
                 camp_final['GMV LW vs LY %'] = (camp_final['GMV_LW'] - camp_final['GMV_LY']) / camp_final['GMV_LY'].replace(0,1)
                 
@@ -237,9 +247,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                                  "Wish": "Wishlists"
                              }, hide_index=True, use_container_width=True)
             else:
-                st.warning("Insufficient week data in marketing file.")
+                st.warning("Please upload a marketing file containing at least two weeks of data.")
         else:
-            st.info("Upload Marketing CSV to see campaign and article depth.")
+            st.info("Upload Marketing CSV in the sidebar to view performance depth.")
 
     with tab4:
         st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
