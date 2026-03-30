@@ -313,7 +313,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 trend_df['ROAS'] = trend_df['GMV'] / trend_df['Spend']
                 
                 fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['Spend'], name="Spend", marker_color='#ff4b4b'), secondary_y=False)
+                fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['Spend'], name="Spend", marker_color='#FF0000'), secondary_y=False)
                 fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['GMV'], name="GMV", marker_color='#0068c9', opacity=0.6), secondary_y=False)
                 fig.add_trace(go.Scatter(x=trend_df['Week'], y=trend_df['ROAS'], name="ROAS", line=dict(color='#2ecc71', width=3)), secondary_y=True)
                 fig.update_layout(title="Marketing Efficiency Trend", barmode='group', height=350, margin=dict(l=0,r=0,t=30,b=0))
