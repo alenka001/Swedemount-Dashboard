@@ -157,11 +157,12 @@ with tab3:
             mkt = load_csv_robust(f_mkt)
             mkt.columns = [c.replace(' ', '') for c in mkt.columns]
             
-            # Mapping & Cleaning
+            # --- MAPPING & CLEANING ---
             m_cols = {'Spend': 'Budgetspent', 'GMV': 'GMV', 'Wish': 'Addtowishlist', 'Clicks': 'Clicks', 'Sold': 'Itemssold', 'Impressions': 'Impressions'}
             for k, v in m_cols.items():
-                t_col = v if v in mkt.columns else next((c for c in mkt.columns if k.lower() in c.lower()), None)
-                mkt[k] = mkt[t_col].apply(clean_val) if t_col else 0.0
+                target_col = v if v in mkt.columns else next((c for c in mkt.columns if k.lower() in c.lower()), None)
+                if target_col: mkt[k] = mkt[target_col].apply(clean_val)
+                else: mkt[k] = 0.0
             
             mkt['Week'] = mkt['Week'].apply(clean_val).astype(int)
             mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2026
@@ -181,9 +182,9 @@ with tab3:
                 s_cw = get_mkt_stats(curr_yr, cw_w)
                 s_lw = get_mkt_stats(curr_yr, lw_w)
                 
-                # Blended COS Calculations
-                total_sales_cw_eur = (nmv_cw_sek / ex_rate)
-                total_sales_lw_eur = (nmv_lw_sek / ex_rate)
+                # Blended COS Calculations (EUR)
+                total_sales_cw_eur = (nmv_cw_sek / ex_rate) if 'nmv_cw_sek' in locals() else 0
+                total_sales_lw_eur = (nmv_lw_sek / ex_rate) if 'nmv_lw_sek' in locals() else 0
                 
                 blended_cw = s_cw['Spend'] / total_sales_cw_eur if total_sales_cw_eur > 0 else 0
                 blended_lw = s_lw['Spend'] / total_sales_lw_eur if total_sales_lw_eur > 0 else 0
@@ -191,35 +192,33 @@ with tab3:
                 st.subheader(f"Marketing Performance Week {cw_w}")
                 mk1, mk2, mk3, mk4, mk5, mk6 = st.columns(6)
                 
-                # 1. Ad Spend (Higher = Red)
+                # Metric 1: Ad Spend (Higher = Red)
                 mk1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}", 
                            delta=f"{((s_cw['Spend']/s_lw['Spend'])-1):.1%}" if s_lw['Spend']>0 else None, delta_color="inverse")
                 
-                # 2. Total GMV
+                # Metric 2: Total GMV
                 mk2.metric("Total GMV", f"€{s_cw['GMV']:,.0f}", 
                            delta=f"{((s_cw['GMV']/s_lw['GMV'])-1):.1%}" if s_lw['GMV']>0 else None)
                 
-                # 3. ROAS (Lower = Red)
+                # Metric 3: ROAS (Lower = Red)
                 mk3.metric("ROAS", f"{s_cw['ROAS']:,.2f}x", 
                            delta=f"{((s_cw['ROAS']/s_lw['ROAS'])-1):.1%}" if s_lw['ROAS']>0 else None)
                 
-                # 4. COS (Higher = Red)
-                cos_delta = s_cw['COS'] - s_lw['COS']
+                # Metric 4: COS (Higher = Red)
                 mk4.metric("COS", f"{s_cw['COS']:.1%}", 
-                           delta=f"{cos_delta:.1%}", delta_color="inverse")
+                           delta=f"{(s_cw['COS'] - s_lw['COS']):.1%}", delta_color="inverse")
                 
-                # 5. Blended COS (Higher = Red)
-                blended_delta = blended_cw - blended_lw
+                # Metric 5: Blended COS (Higher = Red)
                 mk5.metric("Blended COS", f"{blended_cw:.1%}", 
-                           delta=f"{blended_delta:.1%}", delta_color="inverse")
+                           delta=f"{(blended_cw - blended_lw):.1%}", delta_color="inverse")
                 
-                # 6. Impressions (Lower = Red)
+                # Metric 6: Impressions (Lower = Red)
                 mk6.metric("Impressions", f"{s_cw['Impressions']:,.0f}", 
                            delta=f"{((s_cw['Impressions']/s_lw['Impressions'])-1):.1%}" if s_lw['Impressions']>0 else None)
 
-                # Campaign Analytics Table
+                # Campaign Analytics Detail Table
                 st.markdown("---")
-                st.subheader("📣 Campaign Analytics (WoW Comparison)")
+                st.subheader("📣 Campaign Analytics (WoW Details)")
                 c_cw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
                 c_lw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==lw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
                 camp_df = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
@@ -229,20 +228,23 @@ with tab3:
                 camp_df['COS CW'] = camp_df['Spend'] / camp_df['GMV'].replace(0, 1)
                 camp_df['COS LW'] = camp_df['Spend_LW'] / camp_df['GMV_LW'].replace(0, 1)
 
-                def style_mkt(row):
+                def style_mkt_row(row):
                     styles = [''] * len(row)
                     if row['Spend'] > row['Spend_LW']: styles[row.index.get_loc('Spend')] = 'color: #ff4b4b; font-weight: bold'
                     if row['ROAS CW'] < row['ROAS LW']: styles[row.index.get_loc('ROAS CW')] = 'color: #ff4b4b; font-weight: bold'
                     if row['COS CW'] > row['COS LW']: styles[row.index.get_loc('COS CW')] = 'color: #ff4b4b; font-weight: bold'
                     return styles
 
-                st.dataframe(camp_df[['ZMSCampaign', 'Spend', 'GMV', 'ROAS CW', 'COS CW']].style.format({
-                    'Spend': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.2f}x', 'COS CW': '{:.1%}'
-                }).apply(style_mkt, axis=1), hide_index=True, use_container_width=True)
+                st.dataframe(
+                    camp_df[['ZMSCampaign', 'Spend', 'GMV', 'ROAS CW', 'COS CW']].style.format({
+                        'Spend': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.2f}x', 'COS CW': '{:.1%}'
+                    }).apply(style_mkt_row, axis=1), 
+                    hide_index=True, use_container_width=True
+                )
             else:
-                st.warning("Please upload a marketing file with at least two weeks of data.")
+                st.warning("Please upload a marketing file containing at least two weeks of data.")
         else:
-            st.info("Upload Marketing CSV to view performance.")
+            st.info("Upload Marketing CSV in the sidebar to view performance.")
 
     with tab4:
         st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
@@ -262,7 +264,8 @@ with tab3:
                 h1, h2, h3 = st.columns(3)
                 h1.metric("Total Z-Hybrid Sales", f"{total_hybrid_cw:,.0f} kr")
                 h2.metric("Total Zalando Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
-                h3.metric("Andel Z-hybrid (Share)", f"{hybrid_share:.1%}", delta=f"{((total_hybrid_cw/total_hybrid_ly)-1):.1%} YoY" if total_hybrid_ly > 0 else None)
+                h3.metric("Andel Z-hybrid (Share)", f"{hybrid_share:.1%}", 
+                          delta=f"{((total_hybrid_cw/total_hybrid_ly)-1):.1%} YoY" if total_hybrid_ly > 0 else None)
                 
                 st.markdown("---")
                 st.write("**Daily Comparison (SEK)**")
