@@ -15,10 +15,10 @@ st.set_page_config(page_title="Weekly Strategic Board", layout="wide", page_icon
 # --- CSS FOR PRESENTATION MODE ---
 st.markdown("""
     <style>
-    [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { padding: 1px 4px !important; }
-    [data-testid="stDataFrame"] { font-weight: 500 !important; font-size: 13px !important; }
-    [data-testid="stDataFrame"] th { background-color: #f0f2f6 !important; color: black !important; font-weight: bold !important; }
-    .stMetric { background-color: #ffffff; padding: 10px; border-radius: 8px; border: 1px solid #f0f2f6; }
+    [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { padding: 2px 8px !important; }
+    [data-testid="stDataFrame"] { font-weight: 500 !important; font-size: 14px !important; }
+    [data-testid="stDataFrame"] th { background-color: #f8f9fb !important; color: #1c1c1c !important; font-weight: bold !important; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #eef0f4; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -78,35 +78,26 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     df_ly = load_csv_robust(f_ly)
     df_inv = load_csv_robust(f_inv)
     
-    # --- PRE-CLEAN PRIMARY SALES DATA ---
-    # This block ensures 'Sold_Units' and rounded NMV exist for all calculations
     for df in [df_cw, df_lw, df_ly]:
-        # Handle fuzzy matching for "Sold articles" column name
         src_sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), None)
-        
         df['NMV_EUR'] = df['NMV'].apply(clean_val)
-        if src_sold_col:
-            df['Sold_Units'] = df[src_sold_col].apply(clean_val)
-        else:
-            df['Sold_Units'] = 0.0
-            
+        df['Sold_Units'] = df[src_sold_col].apply(clean_val) if src_sold_col else 0.0
         df['NMV_SEK'] = df['NMV_EUR'] * ex_rate
 
-    # Calculate Top-Level SEK Metrics
     nmv_cw_sek = df_cw['NMV_SEK'].sum()
     nmv_lw_sek = df_lw['NMV_SEK'].sum()
     nmv_ly_sek = df_ly['NMV_SEK'].sum()
 
     st.title("🚀 Weekly Strategic Marketplace Board")
 
-    # ROW 1: EUR
+    # ROW 1: EUR Performance (Added Thousand Separators)
     st.subheader("🇪🇺 Row 1: EUR Performance")
     e1, e2, e3 = st.columns(3)
     e1.metric("Current EUR", f"€{nmv_cw_sek/ex_rate:,.0f}")
     e2.metric("LW EUR", f"€{nmv_lw_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
     e3.metric("LY EUR", f"€{nmv_ly_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
 
-    # ROW 2: SEK
+    # ROW 2: SEK Performance (Added Thousand Separators)
     st.subheader("🇸🇪 Row 2: SEK Performance & Target Gaps")
     s1, s2, s3, s4, s5 = st.columns(5)
     s1.metric("LW SEK", f"{nmv_lw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
@@ -122,7 +113,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     st.markdown("---")
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
 
-    # --- TAB 1: BRAND HEALTH ---
     with tab1:
         st.subheader("Health Tracker: YoY Growth (SEK)")
         c1, c2 = st.columns(2)
@@ -130,292 +120,113 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             cw_g = df_cw.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'CW_kr'})
             ly_g = df_ly.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'LY_kr'})
             m = cw_g.merge(ly_g, on=grp, how='left').fillna(0)
-            
-            # --- ROUNDING LOGIC (DATA) ---
-            m['CW_kr'] = m['CW_kr'].round(0).astype(int)
-            m['LY_kr'] = m['LY_kr'].round(0).astype(int)
             m['Growth %'] = (m['CW_kr'] - m['LY_kr']) / m['LY_kr'].replace(0, 1)
-            
             m['Status'] = m['Growth %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
             
-            # --- ROUNDING LOGIC (DISPLAY) ---
-            col.dataframe(
-                m.sort_values('CW_kr', ascending=False), 
-                column_config={
-                    "CW_kr": st.column_config.NumberColumn("CW (kr)", format="%d kr"),
-                    "LY_kr": st.column_config.NumberColumn("LY (kr)", format="%d kr"),
-                    "Growth %": st.column_config.NumberColumn("Growth %", format="%.0f%%")
-                },
-                hide_index=True, 
-                use_container_width=True
-            )
+            # Display with styling for separators
+            col.dataframe(m.sort_values('CW_kr', ascending=False).style.format({
+                "CW_kr": "{:,.0f} kr", "LY_kr": "{:,.0f} kr", "Growth %": "{:.1%}"
+            }), hide_index=True, use_container_width=True)
 
-    # --- TAB 2: ARTICLE PERFORMANCE & TRENDS (UPDATED AGGREGATION) ---
     with tab2:
         st.subheader("🏆 Top 50 Articles: Performance & Stock Alerts")
-        
-        # 1. Identify Inventory Columns
         inv_var_col = next((c for c in df_inv.columns if 'variant' in c.lower()), 'Article variant')
-        name_col = 'article_name' if 'article_name' in df_inv.columns else \
-                   next((c for c in df_inv.columns if any(k in c.lower() for k in ['article name', 'product title', 'title']) and 'partner' not in c.lower()), None)
-        zfs_col = next((c for c in df_inv.columns if 'zfs' in c.lower()), None)
-        pf_col = next((c for c in df_inv.columns if any(k in c.lower() for k in ['partner', 'pf']) and 'stock' in c.lower()), None)
+        name_col = next((c for c in df_inv.columns if any(k in c.lower() for k in ['article_name', 'product title']) and 'partner' not in c.lower()), 'article_name')
+        zfs_col, pf_col = next((c for c in df_inv.columns if 'zfs' in c.lower()), 'zfs'), next((c for c in df_inv.columns if 'pf' in c.lower() and 'stock' in c.lower()), 'pf')
         
-        # --- NEW AGGREGATION LOGIC: SUM STOCK PER VARIANT ---
-        # 1. Clean stock columns BEFORE grouping to ensure they are numeric
-        if zfs_col: df_inv[zfs_col] = df_inv[zfs_col].apply(clean_val)
-        if pf_col: df_inv[pf_col] = df_inv[pf_col].apply(clean_val)
-        
-        # 2. Group by Style/Variant and sum the stock across all sizes
-        agg_dict = {}
-        if name_col: agg_dict[name_col] = 'first' # Keep the descriptive name
-        if zfs_col: agg_dict[zfs_col] = 'sum'     # Sum all ZFS rows (sizes)
-        if pf_col: agg_dict[pf_col] = 'sum'       # Sum all PF rows (sizes)
-        
-        inv_map = df_inv.groupby(inv_var_col).agg(agg_dict).reset_index()
-        
-        # Force integer type for stock columns after summation
-        if zfs_col: inv_map[zfs_col] = inv_map[zfs_col].astype(int)
-        if pf_col: inv_map[pf_col] = inv_map[pf_col].astype(int)
+        df_inv[zfs_col] = df_inv[zfs_col].apply(clean_val)
+        df_inv[pf_col] = df_inv[pf_col].apply(clean_val)
+        inv_map = df_inv.groupby(inv_var_col).agg({name_col: 'first', zfs_col: 'sum', pf_col: 'sum'}).reset_index()
 
-        # 2. Aggregate Sales (Already correctly grouping in your script)
-        target_cols = [c for c in ['NMV_EUR', 'Sold_Units'] if c in df_cw.columns]
-        cw_art = df_cw.groupby('Article variant')[target_cols].sum().reset_index()
-        
-        if 'Sold_Units' not in cw_art.columns: cw_art['Sold_Units'] = 0
-            
+        cw_art = df_cw.groupby('Article variant')[['NMV_EUR', 'Sold_Units']].sum().reset_index()
         lw_art = df_lw.groupby('Article variant')[['NMV_EUR']].sum().reset_index().rename(columns={'NMV_EUR': 'NMV_LW'})
-        
-        # 3. Merge & Status
         top = cw_art.merge(lw_art, on='Article variant', how='left').fillna(0)
-        
-        def get_status_icon(row):
-            if row['NMV_LW'] == 0: return "🆕 New"
-            return "🟢 Up" if row['NMV_EUR'] > row['NMV_LW'] else "🔴 Down"
-        
-        top['Status sales'] = top.apply(get_status_icon, axis=1)
+        top['Status sales'] = top.apply(lambda r: "🆕 New" if r['NMV_LW'] == 0 else ("🟢 Up" if r['NMV_EUR'] > r['NMV_LW'] else "🔴 Down"), axis=1)
         top = top.merge(inv_map, left_on='Article variant', right_on=inv_var_col, how='left')
         
-        # Rename for output display
-        rename_dict = {
-            name_col: "Article Name",
-            zfs_col: "Article Stock ZFS",
-            pf_col: "Article Stock PF",
-            "Sold_Units": "Article sold items",
-            "NMV_EUR": "Article NMV €"
-        }
-        top = top.rename(columns={k: v for k, v in rename_dict.items() if k in top.columns})
+        top = top.rename(columns={name_col: "Article Name", zfs_col: "Stock ZFS", pf_col: "Stock PF", "Sold_Units": "Sold items", "NMV_EUR": "NMV €"})
+        top = top.sort_values('NMV €', ascending=False).head(50)
         
-        # Round values for clean presentation
-        top['Article NMV €'] = top['Article NMV €'].round(0).astype(int)
-        top['Article sold items'] = top['Article sold items'].round(0).astype(int)
-        
-        top = top.sort_values('Article NMV €', ascending=False).head(50)
-
-        # 4. Display
-        final_headers = ['Status sales', 'Article variant', 'Article Name', 'Article NMV €', 'Article sold items', 'Article Stock ZFS', 'Article Stock PF']
-        existing_headers = [h for h in final_headers if h in top.columns]
-
-        st.dataframe(
-            top[existing_headers].style.apply(lambda x: [
-                'background-color: #ffcccc' if (col in ['Article Stock ZFS', 'Article Stock PF'] and 0 < val < x['Article sold items']) else '' 
-                for col, val in x.items()
-            ], axis=1),
-            column_config={
-                "Article NMV €": st.column_config.NumberColumn("Article NMV €", format="€%d"),
-                "Article sold items": st.column_config.NumberColumn("Article sold items", format="%d"),
-                "Article Stock ZFS": st.column_config.NumberColumn("Article Stock ZFS", format="%d"),
-                "Article Stock PF": st.column_config.NumberColumn("Article Stock PF", format="%d"),
-            }, 
-            hide_index=True, 
-            use_container_width=True
-        )
-        
-        st.caption("💡 Cells highlighted in red indicate style stock levels (sum of all sizes) lower than this week's sales.")
+        cols = ['Status sales', 'Article variant', 'Article Name', 'NMV €', 'Sold items', 'Stock ZFS', 'Stock PF']
+        st.dataframe(top[cols].style.format({
+            "NMV €": "€{:,.0f}", "Sold items": "{:,.0f}", "Stock ZFS": "{:,.0f}", "Stock PF": "{:,.0f}"
+        }).apply(lambda x: ['background-color: #fff0f0' if (c in ['Stock ZFS', 'Stock PF'] and 0 < v < x['Sold items']) else '' for c, v in x.items()], axis=1), hide_index=True, use_container_width=True)
 
     with tab3:
         if f_mkt:
             mkt = load_csv_robust(f_mkt)
             mkt.columns = [c.replace(' ', '') for c in mkt.columns]
-            
-            # --- MAPPING & CLEANING ---
             m_cols = {'Spend': 'Budgetspent', 'GMV': 'GMV', 'Wish': 'Addtowishlist', 'Clicks': 'Clicks', 'Sold': 'Itemssold', 'Impressions': 'Impressions'}
             for k, v in m_cols.items():
-                target_col = v if v in mkt.columns else next((c for c in mkt.columns if k.lower() in c.lower()), None)
-                if target_col: mkt[k] = mkt[target_col].apply(clean_val)
-                else: mkt[k] = 0.0
+                t_col = v if v in mkt.columns else next((c for c in mkt.columns if k.lower() in c.lower()), None)
+                mkt[k] = mkt[t_col].apply(clean_val) if t_col else 0.0
             
             mkt['ZMSCampaign'] = mkt['ZMSCampaign'] if 'ZMSCampaign' in mkt.columns else (mkt['Campaign'] if 'Campaign' in mkt.columns else "Unknown")
-            mkt['ArticleSKU'] = mkt['ArticleSKU'] if 'ArticleSKU' in mkt.columns else (mkt['SKU'] if 'SKU' in mkt.columns else "Unknown")
-            
             mkt['Week'] = mkt['Week'].apply(clean_val).astype(int)
-            mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2024
+            mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2026
             
             weeks = sorted(mkt['Week'].unique())
-            years = sorted(mkt['Year'].unique())
-            
             if len(weeks) >= 2:
-                cw_w, lw_w = weeks[-1], weeks[-2]
-                llw_w = weeks[-3] if len(weeks) > 2 else None
-                curr_yr = years[-1]
-                last_yr = years[-2] if len(years) > 1 else None
+                cw_w, lw_w, llw_w = weeks[-1], weeks[-2], (weeks[-3] if len(weeks) > 2 else None)
+                curr_yr = sorted(mkt['Year'].unique())[-1]
                 
-                # Fetch total sales for Blended COS (Total NMV in EUR)
-                total_sales_eur = (nmv_cw_sek / ex_rate) if 'nmv_cw_sek' in locals() else 0
-
                 def get_mkt_stats(y, w):
-                    subset = mkt[(mkt['Year'] == y) & (mkt['Week'] == w)]
-                    s = subset[['Spend', 'GMV', 'Wish', 'Clicks', 'Sold', 'Impressions']].sum()
+                    s = mkt[(mkt['Year'] == y) & (mkt['Week'] == w)][['Spend', 'GMV', 'Wish', 'Clicks', 'Sold', 'Impressions']].sum()
                     s['ROAS'] = s['GMV'] / s['Spend'] if s['Spend'] > 0 else 0
-                    s['COS'] = s['Spend'] / s['GMV'] if s['GMV'] > 0 else 0
                     return s
 
-                s_cw = get_mkt_stats(curr_yr, cw_w)
-                s_lw = get_mkt_stats(curr_yr, lw_w)
-                s_ly = get_mkt_stats(last_yr, cw_w) if last_yr else s_cw * 0
+                s_cw, s_lw = get_mkt_stats(curr_yr, cw_w), get_mkt_stats(curr_yr, lw_w)
+                total_sales_eur = (nmv_cw_sek / ex_rate)
                 
-                blended_cos_cw = s_cw['Spend'] / total_sales_eur if total_sales_eur > 0 else 0
-                
-                def pct_change(c, p): return ((c/p)-1) if p > 0 else 0
-
-                # --- TOP KPI SUMMARY ---
                 st.subheader(f"Marketing Performance Week {cw_w}")
-                
-                # We use 6 columns now to include the new GMV summary
                 mk1, mk2, mk3, mk4, mk5, mk6 = st.columns(6)
                 
-                # 1. Ad Spend
-                mk1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}", 
-                           delta=f"LW: {pct_change(s_cw['Spend'], s_lw['Spend']):.1%}")
-                
-                # 2. Total GMV (The new addition)
-                mk2.metric("Total GMV", f"€{s_cw['GMV']:,.0f}", 
-                           delta=f"LW: {pct_change(s_cw['GMV'], s_lw['GMV']):.1%}")
-                
-                # 3. ROAS
-                mk3.metric("ROAS", f"{s_cw['ROAS']:.2f}x", 
-                           delta=f"LW: {pct_change(s_cw['ROAS'], s_lw['ROAS']):.1%}")
-                
-                # 4. COS
-                mk4.metric("COS", f"{s_cw['COS']:.1%}", 
-                           delta=f"LW: {(s_cw['COS'] - s_lw['COS']):.1%}", delta_color="inverse")
-                
-                # 5. Blended COS
-                mk5.metric("Blended COS", f"{blended_cos_cw:.1%}", help="Ad Spend / Total Marketplace NMV")
-                
-                # 6. Impressions
-                mk6.metric("Impressions", f"{s_cw['Impressions']:,.0f}", 
-                           delta=f"LY: {pct_change(s_cw['Impressions'], s_ly['Impressions']):.1%}")
+                # AD SPEND: Color RED if Spend increased (delta_color="inverse")
+                mk1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}", delta=f"{((s_cw['Spend']/s_lw['Spend'])-1):.1%}", delta_color="inverse")
+                mk2.metric("Total GMV", f"€{s_cw['GMV']:,.0f}", delta=f"{((s_cw['GMV']/s_lw['GMV'])-1):.1%}")
+                mk3.metric("ROAS", f"{s_cw['ROAS']:,.2f}x", delta=f"{((s_cw['ROAS']/s_lw['ROAS'])-1):.1%}")
+                mk4.metric("COS", f"{(s_cw['Spend']/s_cw['GMV'] if s_cw['GMV']>0 else 0):.1%}")
+                mk5.metric("Blended COS", f"{(s_cw['Spend']/total_sales_eur if total_sales_eur>0 else 0):.1%}")
+                mk6.metric("Impressions", f"{s_cw['Impressions']:,.0f}")
 
-                # --- TREND CHART ---
+                # Campaign Analytics with Red Indications
                 st.markdown("---")
-                trend_df = mkt[mkt['Year'] == curr_yr].groupby('Week').agg({'Spend':'sum', 'GMV':'sum'}).reset_index()
-                trend_df['ROAS'] = trend_df['GMV'] / trend_df['Spend']
+                st.subheader("📣 Campaign Analytics (WoW Comparison)")
+                c_cw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
+                c_lw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==lw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
+                camp_df = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
                 
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['Spend'], name="Spend", marker_color='#FF0000'), secondary_y=False)
-                fig.add_trace(go.Bar(x=trend_df['Week'], y=trend_df['GMV'], name="GMV", marker_color='#0068c9', opacity=0.6), secondary_y=False)
-                fig.add_trace(go.Scatter(x=trend_df['Week'], y=trend_df['ROAS'], name="ROAS", line=dict(color='#2ecc71', width=3)), secondary_y=True)
-                fig.update_layout(title="Marketing Efficiency Trend", barmode='group', height=350, margin=dict(l=0,r=0,t=30,b=0))
-                st.plotly_chart(fig, use_container_width=True)
+                camp_df['ROAS CW'] = camp_df['GMV'] / camp_df['Spend'].replace(0, 1)
+                camp_df['ROAS LW'] = camp_df['GMV_LW'] / camp_df['Spend_LW'].replace(0, 1)
 
-                # --- CAMPAIGN PERFORMANCE ---
-                st.markdown("---")
-                st.subheader("📣 Campaign Analytics (WoW & YoY Compare)")
-                
-                def get_camp_data(y, w):
-                    if w is None: return pd.DataFrame(columns=['Spend', 'GMV'])
-                    return mkt[(mkt['Year']==y) & (mkt['Week']==w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
+                def style_marketing_table(row):
+                    styles = [''] * len(row)
+                    # Red if Spend increased
+                    if row['Spend'] > row['Spend_LW']: styles[row.index.get_loc('Spend')] = 'color: #ff4b4b; font-weight: bold'
+                    # Red if ROAS decreased
+                    if row['ROAS CW'] < row['ROAS LW']: styles[row.index.get_loc('ROAS CW')] = 'color: #ff4b4b; font-weight: bold'
+                    return styles
 
-                c_cw = get_camp_data(curr_yr, cw_w)
-                c_lw = get_camp_data(curr_yr, lw_w)
-                c_llw = get_camp_data(curr_yr, llw_w)
-                c_ly = get_camp_data(last_yr, cw_w)
-
-                camp_final = c_cw.join(c_lw, rsuffix='_LW', how='left').join(c_llw, rsuffix='_LLW', how='left').join(c_ly, rsuffix='_LY', how='left').fillna(0)
-                
-                # Check for column existence
-                for col_suffix in ['_LW', '_LLW', '_LY']:
-                    if f'Spend{col_suffix}' not in camp_final.columns: camp_final[f'Spend{col_suffix}'] = 0.0
-                    if f'GMV{col_suffix}' not in camp_final.columns: camp_final[f'GMV{col_suffix}'] = 0.0
-                
-                # Safe calculations using lambda instead of .replace on scalars
-                camp_final['COS'] = camp_final.apply(lambda x: x['Spend'] / x['GMV'] if x['GMV'] != 0 else 0, axis=1)
-                camp_final['Spend vs LLW %'] = (camp_final['Spend_LW'] - camp_final['Spend_LLW']) / camp_final['Spend_LLW'].apply(lambda x: x if x != 0 else 1)
-                camp_final['Spend LW vs LY %'] = (camp_final['Spend_LW'] - camp_final['Spend_LY']) / camp_final['Spend_LY'].apply(lambda x: x if x != 0 else 1)
-                camp_final['GMV vs LLW %'] = (camp_final['GMV_LW'] - camp_final['GMV_LLW']) / camp_final['GMV_LLW'].apply(lambda x: x if x != 0 else 1)
-                
-                camp_final['ROAS LW'] = camp_final.apply(lambda x: x['GMV_LW'] / x['Spend_LW'] if x['Spend_LW'] != 0 else 0, axis=1)
-                
-                # Fixed ROAS Trend logic
-                def calc_roas_trend(row):
-                    cur_roas = row['GMV'] / row['Spend'] if row['Spend'] != 0 else 0
-                    prev_roas = row['GMV_LW'] / row['Spend_LW'] if row['Spend_LW'] != 0 else 0
-                    return "🟢" if cur_roas >= prev_roas else "🔴"
-                
-                camp_final['ROAS Trend'] = camp_final.apply(calc_roas_trend, axis=1)
-
-                st.dataframe(
-                    camp_final.reset_index()[['ZMSCampaign', 'Spend', 'Spend vs LLW %', 'GMV', 'COS', 'ROAS LW', 'ROAS Trend']], 
-                    column_config={
-                        "Spend": st.column_config.NumberColumn("Spend CW (€)", format="€%d"),
-                        "Spend vs LLW %": st.column_config.NumberColumn("vs LLW %", format="%.0f%%"),
-                        "GMV": st.column_config.NumberColumn("GMV CW (€)", format="€%d"),
-                        "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
-                        "ROAS LW": st.column_config.NumberColumn("ROAS LW", format="%.2fx")
-                    }, hide_index=True, use_container_width=True)
-
-                # --- ARTICLE ANALYTICS ---
-                st.markdown("---")
-                st.subheader("📦 Article SKU Performance (Current Week)")
-                art_df = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ArticleSKU').agg({
-                    'GMV': 'sum', 'Spend': 'sum', 'Clicks': 'sum', 'Sold': 'sum', 'Wish': 'sum'
-                }).reset_index()
-                
-                # Rounding and Safe Division for Article Table
-                art_df['Article NMV €'] = art_df['GMV'].round(0).astype(int)
-                art_df['ROAS'] = art_df.apply(lambda x: x['GMV'] / x['Spend'] if x['Spend'] != 0 else 0, axis=1)
-                art_df['COS'] = art_df.apply(lambda x: x['Spend'] / x['GMV'] if x['GMV'] != 0 else 0, axis=1)
-                art_df['CVR'] = art_df.apply(lambda x: x['Sold'] / x['Clicks'] if x['Clicks'] != 0 else 0, axis=1)
-                
-                st.dataframe(
-                    art_df[['ArticleSKU', 'ROAS', 'COS', 'Clicks', 'CVR', 'Wish']].sort_values('ROAS', ascending=False),
-                    column_config={
-                        "ROAS": st.column_config.NumberColumn("ROAS", format="%.2fx"),
-                        "COS": st.column_config.NumberColumn("COS %", format="%.1f%%"),
-                        "Clicks": st.column_config.NumberColumn("Clicks", format="%d"),
-                        "CVR": st.column_config.NumberColumn("CVR", format="%.1%"),
-                        "Wish": st.column_config.NumberColumn("Wishlists", format="%d")
-                    }, hide_index=True, use_container_width=True)
-            else:
-                st.warning("Please upload a marketing file containing at least two weeks of data.")
-        else:
-            st.info("Upload Marketing CSV in the sidebar to view performance depth.")
+                st.dataframe(camp_df[['ZMSCampaign', 'Spend', 'Spend_LW', 'GMV', 'ROAS CW', 'ROAS LW']].style.format({
+                    'Spend': '€{:,.0f}', 'Spend_LW': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.2f}x', 'ROAS LW': '{:,.2f}x'
+                }).apply(style_marketing_table, axis=1), hide_index=True, use_container_width=True)
 
     with tab4:
-        st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
+        st.subheader("🔄 Z-Hybrid Performance")
         if f_hybrid:
             hy = load_csv_robust(f_hybrid)
-            hy.columns = [c.strip() for c in hy.columns]
-            val_col, ly_col, date_col = 'Ordervärde ex.moms', 'Ordervärde ex. moms LY', 'Datum'
-            
+            val_col, date_col = 'Ordervärde ex.moms', 'Datum'
             if val_col in hy.columns:
                 hy_clean = hy[hy[date_col].str.lower() != 'total'].copy()
-                hy_clean['Sales_CW'] = hy_clean[val_col].apply(clean_val)
-                hy_clean['Sales_LY'] = hy_clean[ly_col].apply(clean_val) if ly_col in hy_clean.columns else 0.0
-                total_hybrid_cw = hy_clean['Sales_CW'].sum()
-                total_hybrid_ly = hy_clean['Sales_LY'].sum()
-                hybrid_share = (total_hybrid_cw / nmv_cw_sek) if nmv_cw_sek > 0 else 0
+                hy_clean['Sales'] = hy_clean[val_col].apply(clean_val)
+                total_hy = hy_clean['Sales'].sum()
                 
                 h1, h2, h3 = st.columns(3)
-                h1.metric("Total Z-Hybrid Sales", f"{total_hybrid_cw:,.0f} kr")
-                h2.metric("Total Zalando Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
-                h3.metric("Andel Z-hybrid (Share)", f"{hybrid_share:.1%}", delta=f"{((total_hybrid_cw/total_hybrid_ly)-1):.1%} YoY" if total_hybrid_ly > 0 else None)
+                h1.metric("Z-Hybrid Sales", f"{total_hy:,.0f} kr")
+                h2.metric("Total Sales", f"{nmv_cw_sek:,.0f} kr")
+                h3.metric("Hybrid Share", f"{(total_hy/nmv_cw_sek):.1%}")
                 
-                st.markdown("---")
-                st.write("**Daily Comparison (SEK)**")
-                daily = hy_clean.groupby([date_col, 'Veckodag'])[['Sales_CW', 'Sales_LY']].sum().reset_index()
-                st.dataframe(daily, hide_index=True, use_container_width=True, column_config={"Sales_CW": st.column_config.NumberColumn("Current Year (kr)", format="%d kr"), "Sales_LY": st.column_config.NumberColumn("Last Year (kr)", format="%d kr")})
+                st.dataframe(hy_clean.groupby([date_col, 'Veckodag'])['Sales'].sum().reset_index().style.format({"Sales": "{:,.0f} kr"}), hide_index=True, use_container_width=True)
 
 else:
     st.info("Awaiting file uploads 1-4 in the sidebar to generate board.")
