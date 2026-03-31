@@ -229,7 +229,7 @@ with tab3:
                 camp_df['COS CW'] = camp_df['Spend'] / camp_df['GMV'].replace(0, 1)
                 camp_df['COS LW'] = camp_df['Spend_LW'] / camp_df['GMV_LW'].replace(0, 1)
 
-                def style_marketing_table(row):
+                def style_mkt(row):
                     styles = [''] * len(row)
                     if row['Spend'] > row['Spend_LW']: styles[row.index.get_loc('Spend')] = 'color: #ff4b4b; font-weight: bold'
                     if row['ROAS CW'] < row['ROAS LW']: styles[row.index.get_loc('ROAS CW')] = 'color: #ff4b4b; font-weight: bold'
@@ -238,27 +238,36 @@ with tab3:
 
                 st.dataframe(camp_df[['ZMSCampaign', 'Spend', 'GMV', 'ROAS CW', 'COS CW']].style.format({
                     'Spend': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.2f}x', 'COS CW': '{:.1%}'
-                }).apply(style_marketing_table, axis=1), hide_index=True, use_container_width=True)
+                }).apply(style_mkt, axis=1), hide_index=True, use_container_width=True)
             else:
                 st.warning("Please upload a marketing file with at least two weeks of data.")
         else:
             st.info("Upload Marketing CSV to view performance.")
+
     with tab4:
-        st.subheader("🔄 Z-Hybrid Performance")
+        st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
         if f_hybrid:
             hy = load_csv_robust(f_hybrid)
-            val_col, date_col = 'Ordervärde ex.moms', 'Datum'
+            hy.columns = [c.strip() for c in hy.columns]
+            val_col, ly_col, date_col = 'Ordervärde ex.moms', 'Ordervärde ex. moms LY', 'Datum'
+            
             if val_col in hy.columns:
                 hy_clean = hy[hy[date_col].str.lower() != 'total'].copy()
-                hy_clean['Sales'] = hy_clean[val_col].apply(clean_val)
-                total_hy = hy_clean['Sales'].sum()
+                hy_clean['Sales_CW'] = hy_clean[val_col].apply(clean_val)
+                hy_clean['Sales_LY'] = hy_clean[ly_col].apply(clean_val) if ly_col in hy_clean.columns else 0.0
+                total_hybrid_cw = hy_clean['Sales_CW'].sum()
+                total_hybrid_ly = hy_clean['Sales_LY'].sum()
+                hybrid_share = (total_hybrid_cw / nmv_cw_sek) if nmv_cw_sek > 0 else 0
                 
                 h1, h2, h3 = st.columns(3)
-                h1.metric("Z-Hybrid Sales", f"{total_hy:,.0f} kr")
-                h2.metric("Total Sales", f"{nmv_cw_sek:,.0f} kr")
-                h3.metric("Hybrid Share", f"{(total_hy/nmv_cw_sek):.1%}")
+                h1.metric("Total Z-Hybrid Sales", f"{total_hybrid_cw:,.0f} kr")
+                h2.metric("Total Zalando Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
+                h3.metric("Andel Z-hybrid (Share)", f"{hybrid_share:.1%}", delta=f"{((total_hybrid_cw/total_hybrid_ly)-1):.1%} YoY" if total_hybrid_ly > 0 else None)
                 
-                st.dataframe(hy_clean.groupby([date_col, 'Veckodag'])['Sales'].sum().reset_index().style.format({"Sales": "{:,.0f} kr"}), hide_index=True, use_container_width=True)
+                st.markdown("---")
+                st.write("**Daily Comparison (SEK)**")
+                daily = hy_clean.groupby([date_col, 'Veckodag'])[['Sales_CW', 'Sales_LY']].sum().reset_index()
+                st.dataframe(daily.style.format({"Sales_CW": "{:,.0f} kr", "Sales_LY": "{:,.0f} kr"}), hide_index=True, use_container_width=True)
 
 else:
     st.info("Awaiting file uploads 1-4 in the sidebar to generate board.")
