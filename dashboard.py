@@ -240,7 +240,7 @@ with tab3:
 
                 st.dataframe(camp_df[['ZMSCampaign', 'Spend', 'GMV', 'ROAS CW', 'COS CW']].style.format({
                     'Spend': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.2f}x', 'COS CW': '{:.1%}'
-                }).apply(style_marketing_table, axis=1), hide_index=True, use_container_width=True)    
+                }).apply(style_marketing_table, axis=1), hide_index=True, use_container_width=True)
 
     with tab4:
         st.subheader("🔄 Z-Hybrid Performance")
