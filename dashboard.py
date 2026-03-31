@@ -78,7 +78,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     df_ly = load_csv_robust(f_ly)
     df_inv = load_csv_robust(f_inv)
     
-    # Pre-clean primary sales data
     for df in [df_cw, df_lw, df_ly]:
         src_sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), None)
         df['NMV_EUR'] = df['NMV'].apply(clean_val)
@@ -91,14 +90,14 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     st.title("🚀 Weekly Strategic Marketplace Board")
 
-    # ROW 1: EUR
+    # ROW 1: EUR Performance
     st.subheader("🇪🇺 Row 1: EUR Performance")
     e1, e2, e3 = st.columns(3)
     e1.metric("Current EUR", f"€{nmv_cw_sek/ex_rate:,.0f}")
     e2.metric("LW EUR", f"€{nmv_lw_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
     e3.metric("LY EUR", f"€{nmv_ly_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
 
-    # ROW 2: SEK
+    # ROW 2: SEK Performance
     st.subheader("🇸🇪 Row 2: SEK Performance & Target Gaps")
     s1, s2, s3, s4, s5 = st.columns(5)
     s1.metric("LW SEK", f"{nmv_lw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
@@ -122,6 +121,8 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             ly_g = df_ly.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'LY_kr'})
             m = cw_g.merge(ly_g, on=grp, how='left').fillna(0)
             m['Growth %'] = (m['CW_kr'] - m['LY_kr']) / m['LY_kr'].replace(0, 1)
+            # RESTORED STATUS INDICATORS
+            m['Status'] = m['Growth %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
             
             col.dataframe(m.sort_values('CW_kr', ascending=False).style.format({
                 "CW_kr": "{:,.0f} kr", "LY_kr": "{:,.0f} kr", "Growth %": "{:.1%}"
@@ -196,21 +197,30 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 c_cw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
                 c_lw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==lw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
                 camp_df = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
+                
+                # Pre-calculate trends to avoid KeyError during styling
                 camp_df['ROAS CW'] = camp_df['GMV'] / camp_df['Spend'].replace(0, 1)
                 camp_df['ROAS LW'] = camp_df['GMV_LW'] / camp_df['Spend_LW'].replace(0, 1)
                 camp_df['COS CW'] = camp_df['Spend'] / camp_df['GMV'].replace(0, 1)
                 camp_df['COS LW'] = camp_df['Spend_LW'] / camp_df['GMV_LW'].replace(0, 1)
+                
+                camp_df['Spend_Red'] = camp_df['Spend'] > camp_df['Spend_LW']
+                camp_df['ROAS_Red'] = camp_df['ROAS CW'] < camp_df['ROAS LW']
+                camp_df['COS_Red'] = camp_df['COS CW'] > camp_df['COS LW']
 
-                def style_mkt(row):
+                def style_mkt_safe(row):
                     styles = [''] * len(row)
-                    if row['Spend'] > row['Spend_LW']: styles[row.index.get_loc('Spend')] = 'color: #ff4b4b; font-weight: bold'
-                    if row['ROAS CW'] < row['ROAS LW']: styles[row.index.get_loc('ROAS CW')] = 'color: #ff4b4b; font-weight: bold'
-                    if row['COS CW'] > row['COS LW']: styles[row.index.get_loc('COS CW')] = 'color: #ff4b4b; font-weight: bold'
+                    if row['Spend_Red']: styles[row.index.get_loc('Spend')] = 'color: #ff4b4b; font-weight: bold'
+                    if row['ROAS_Red']: styles[row.index.get_loc('ROAS CW')] = 'color: #ff4b4b; font-weight: bold'
+                    if row['COS_Red']: styles[row.index.get_loc('COS CW')] = 'color: #ff4b4b; font-weight: bold'
                     return styles
 
-                st.dataframe(camp_df[['ZMSCampaign', 'Spend', 'GMV', 'ROAS CW', 'COS CW']].style.format({
+                # Display with hidden trend columns used for styling
+                st.dataframe(camp_df[['ZMSCampaign', 'Spend', 'GMV', 'ROAS CW', 'COS CW', 'Spend_Red', 'ROAS_Red', 'COS_Red']].style.format({
                     'Spend': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.2f}x', 'COS CW': '{:.1%}'
-                }).apply(style_mkt, axis=1), hide_index=True, use_container_width=True)
+                }).apply(style_mkt_safe, axis=1), 
+                column_config={"Spend_Red": None, "ROAS_Red": None, "COS_Red": None},
+                hide_index=True, use_container_width=True)
             else:
                 st.warning("Upload a marketing file with at least two weeks of data.")
         else:
