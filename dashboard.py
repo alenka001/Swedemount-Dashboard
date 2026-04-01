@@ -101,7 +101,7 @@ inv_name_col = 'article_name'
 zfs_col = 'sellable_zfs_stock'
 pf_col = 'sellable_pf_stock'
     
-    df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].str.strip().str.upper()
+df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].str.strip().str.upper()
 df_inv_raw[zfs_col] = df_inv_raw[zfs_col].apply(clean_val)
 df_inv_raw[pf_col] = df_inv_raw[pf_col].apply(clean_val)
 
