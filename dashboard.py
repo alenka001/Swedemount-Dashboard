@@ -194,16 +194,44 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         if f_mkt:
             st.subheader("❤️ Top 50 Most Added to Wishlist (Latest Data)")
             m_wish_raw = load_csv_robust(f_mkt)
+            
+            # Standardize column names (remove spaces)
             m_wish_raw.columns = [c.replace(' ', '') for c in m_wish_raw.columns]
             
+            # 1. Identify the latest week available in the file
             m_wish_raw['W_Clean'] = m_wish_raw['Week'].apply(clean_val)
             l_week = m_wish_raw['W_Clean'].max()
             
+            # 2. Filter for that week and group by SKU
             w_data = m_wish_raw[m_wish_raw['W_Clean'] == l_week].groupby('ConfigSKU')[['Addtowishlist']].sum().reset_index()
+            
+            # 3. Clean the join keys (Critical for finding items like 00E21A01M-Q11)
+            w_data['ConfigSKU'] = w_data['ConfigSKU'].str.strip().str.upper()
             w_data['Addtowishlist'] = w_data['Addtowishlist'].apply(clean_val)
             
-            w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on='zalando_article_variant', how='left').sort_values('Addtowishlist', ascending=False).head(50)
-            st.dataframe(w_merged[['ConfigSKU', 'article_name', 'Addtowishlist', 'Total Stock', 'sellable_zfs_stock', 'sellable_pf_stock']].style.format(precision=0), hide_index=True, use_container_width=True)
+            # 4. Merge with the Inventory Map created in Part 1
+            w_merged = w_data.merge(
+                inv_map, 
+                left_on='ConfigSKU', 
+                right_on=inv_sku_col, 
+                how='left'
+            ).sort_values('Addtowishlist', ascending=False).head(50)
+            
+            # 5. Display with whole numbers (no decimals)
+            st.dataframe(
+                w_merged[[
+                    'ConfigSKU', 
+                    inv_name_col, 
+                    'Addtowishlist', 
+                    'Total Stock', 
+                    zfs_col, 
+                    pf_col
+                ]].style.format(precision=0), 
+                hide_index=True, 
+                use_container_width=True
+            )
+        else:
+            st.info("Please upload the Marketing Full (CSV) to see Wishlist data.")
 
     with tabs[3]: # 📣 Marketing Summary & Campaign Table
         if f_mkt:
