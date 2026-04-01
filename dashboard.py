@@ -97,19 +97,20 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     # 1. Process Inventory (Hardcoded Columns based on your description)
     inv_sku_col = 'zalando_article_variant'
-    inv_name_col = 'article_name'
-    zfs_col = 'sellable_zfs_stock'
-    pf_col = 'sellable_pf_stock'
+inv_name_col = 'article_name'
+zfs_col = 'sellable_zfs_stock'
+pf_col = 'sellable_pf_stock'
     
-    df_inv_raw[zfs_col] = df_inv_raw[zfs_col].apply(clean_val)
-    df_inv_raw[pf_col] = df_inv_raw[pf_col].apply(clean_val)
-    
-    inv_map = df_inv_raw.groupby(inv_sku_col).agg({
-        inv_name_col: 'first', 
-        zfs_col: 'sum', 
-        pf_col: 'sum'
-    }).reset_index()
-    inv_map['Total Stock'] = inv_map[zfs_col] + inv_map[pf_col]
+    df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].str.strip().str.upper()
+df_inv_raw[zfs_col] = df_inv_raw[zfs_col].apply(clean_val)
+df_inv_raw[pf_col] = df_inv_raw[pf_col].apply(clean_val)
+
+inv_map = df_inv_raw.groupby(inv_sku_col).agg({
+    inv_name_col: 'first', 
+    zfs_col: 'sum', 
+    pf_col: 'sum'
+}).reset_index()
+inv_map['Total Stock'] = inv_map[zfs_col] + inv_map[pf_col]
 
     # 2. Process Sales - Ensure join_key uses Zalando Variant ID
     def process_sales(df):
