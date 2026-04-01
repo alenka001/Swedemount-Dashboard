@@ -200,31 +200,43 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             # Standardize column names (remove spaces)
             m_wish_raw.columns = [c.replace(' ', '') for c in m_wish_raw.columns]
             
-            # 1. Identify the latest week available in the file
+            # --- CRITICAL FIX: Clean data BEFORE grouping ---
+            # 1. Convert 'Week' and 'Addtowishlist' to actual numbers
             m_wish_raw['W_Clean'] = m_wish_raw['Week'].apply(clean_val)
+            m_wish_raw['Wish_Numeric'] = m_wish_raw['Addtowishlist'].apply(clean_val)
+            
+            # 2. Identify the latest week available (e.g., 13.0)
             l_week = m_wish_raw['W_Clean'].max()
             
-            # 2. Filter for that week and group by SKU
-            w_data = m_wish_raw[m_wish_raw['W_Clean'] == l_week].groupby('ConfigSKU')[['Addtowishlist']].sum().reset_index()
+            # 3. Filter for the latest week and group by SKU
+            # We sum the Numeric column so 264 is recognized as larger than 5
+            w_data = m_wish_raw[m_wish_raw['W_Clean'] == l_week].groupby('ConfigSKU')[['Wish_Numeric']].sum().reset_index()
             
-            # 3. Clean the join keys (Critical for finding items like 00E21A01M-Q11)
+            # 4. Clean SKU keys for a perfect match with Inventory
             w_data['ConfigSKU'] = w_data['ConfigSKU'].str.strip().str.upper()
-            w_data['Addtowishlist'] = w_data['Addtowishlist'].apply(clean_val)
             
-            # 4. Merge with the Inventory Map created in Part 1
+            # 5. Merge with the Inventory Map (ensure inv_sku_col is 'zalando_article_variant')
+            # This brings in the correct Article Names and Stock levels
             w_merged = w_data.merge(
                 inv_map, 
                 left_on='ConfigSKU', 
-                right_on=inv_sku_col, 
+                right_on='zalando_article_variant', 
                 how='left'
-            ).sort_values('Addtowishlist', ascending=False).head(50)
+            ).sort_values('Wish_Numeric', ascending=False).head(50)
             
-            # 5. Display with whole numbers (no decimals)
+            # 6. Final display preparation
+            w_disp = w_merged.rename(columns={'Wish_Numeric': 'Add to wishlist'})
+            
+            # Column variables from your inventory logic
+            name_col = 'article_name'
+            zfs_col = 'sellable_zfs_stock'
+            pf_col = 'sellable_pf_stock'
+
             st.dataframe(
-                w_merged[[
+                w_disp[[
                     'ConfigSKU', 
-                    inv_name_col, 
-                    'Addtowishlist', 
+                    name_col, 
+                    'Add to wishlist', 
                     'Total Stock', 
                     zfs_col, 
                     pf_col
