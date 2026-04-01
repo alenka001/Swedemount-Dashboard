@@ -128,13 +128,26 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     st.title("🚀 Weekly Strategic Marketplace Board")
 
-    # Metrics Row
+    # Metrics Row: Performance % toward Budget and Prognos
     m1, m2, m3, m4, m5 = st.columns(5)
+    
+    # 1. Current NMV in EUR
     m1.metric("Current NMV", f"€{nmv_cw_sek/ex_rate:,.0f}")
+    
+    # 2. vs Last Week (Growth %)
     m2.metric("vs LW (SEK)", f"{nmv_cw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1):.1%}")
+    
+    # 3. vs Last Year (Growth %)
     m3.metric("vs LY (SEK)", f"{nmv_ly_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1):.1%}")
-    m4.metric("vs Budget", f"{weekly_budget_sek:,.0f} kr", delta=f"{(nmv_cw_sek - weekly_budget_sek):,.0f} kr")
-    m5.metric("vs Prognos", f"{weekly_prognos_sek:,.0f} kr", delta=f"{(nmv_cw_sek - weekly_prognos_sek):,.0f} kr")
+    
+    # 4. Performance vs Budget (%)
+    b_reach = (nmv_cw_sek / weekly_budget_sek)
+    m4.metric("Budget Reach", f"{b_reach:.1%}", delta=f"Target: {weekly_budget_sek:,.0f} kr")
+    
+    # 5. Performance vs Prognos (%)
+    # This shows "how good or bad we are performing" relative to the goal
+    p_reach = (nmv_cw_sek / weekly_prognos_sek)
+    m5.metric("Prognos Reach", f"{p_reach:.1%}", delta=f"Target: {weekly_prognos_sek:,.0f} kr")
 
     st.markdown("---")
     tabs = st.tabs(["📈 Health", "🏆 Top 50 Revenue", "❤️ Wishlist Top 50", "📣 Marketing", "🌍 Market Dev", "🔄 Z-Hybrid", "📝 Analysis"])
