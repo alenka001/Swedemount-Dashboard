@@ -64,12 +64,16 @@ weekly_prognos_sek = st.sidebar.number_input("Prognos (SEK)", value=4500000)
 
 st.sidebar.markdown("---")
 st.sidebar.header("📂 Data Upload")
-f_cw = st.sidebar.file_uploader("1. Sales CW (CSV)", type="csv")
-f_lw = st.sidebar.file_uploader("2. Sales LW (CSV)", type="csv")
-f_ly = st.sidebar.file_uploader("3. Last Year Sales (CSV)", type="csv")
+f_cw = st.sidebar.file_uploader("1. Sales CW (Article Level) (CSV)", type="csv")
+f_lw = st.sidebar.file_uploader("2. Sales LW (Article Level) (CSV)", type="csv")
+f_ly = st.sidebar.file_uploader("3. Last Year Sales (Article Level) (CSV)", type="csv")
 f_inv = st.sidebar.file_uploader("4. Inventory Report (CSV)", type="csv")
 f_mkt = st.sidebar.file_uploader("5. Marketing Full (CSV)", type="csv")
 f_hybrid = st.sidebar.file_uploader("6. Z-Hybrid Daily Sales (CSV)", type="csv")
+
+st.sidebar.subheader("🌍 Market Development Files")
+f_market_cw = st.sidebar.file_uploader("Market Performance CW (Country Report)", type="csv")
+f_market_lw = st.sidebar.file_uploader("Market Performance LW (Country Report)", type="csv")
 
 # --- MAIN LOGIC ---
 if all([f_cw, f_lw, f_ly, f_inv]):
@@ -90,28 +94,19 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     st.title("🚀 Weekly Strategic Marketplace Board")
 
-    # ROW 1: EUR Performance
-    st.subheader("🇪🇺 Row 1: EUR Performance")
-    e1, e2, e3 = st.columns(3)
-    e1.metric("Current EUR", f"€{nmv_cw_sek/ex_rate:,.0f}")
-    e2.metric("LW EUR", f"€{nmv_lw_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
-    e3.metric("LY EUR", f"€{nmv_ly_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
-
-    # ROW 2: SEK Performance
-    st.subheader("🇸🇪 Row 2: SEK Performance & Target Gaps")
-    s1, s2, s3, s4, s5 = st.columns(5)
-    s1.metric("LW SEK", f"{nmv_lw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%} vs LW")
-    s2.metric("LY SEK", f"{nmv_ly_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%} vs LY")
-    
+    # Metrics Rows
+    st.subheader("📊 High-Level Performance")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Current NMV", f"€{nmv_cw_sek/ex_rate:,.0f}")
+    m2.metric("vs LW (SEK)", f"{nmv_cw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1) if nmv_lw_sek>0 else 0:.1%}")
+    m3.metric("vs LY (SEK)", f"{nmv_ly_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1) if nmv_ly_sek>0 else 0:.1%}")
     b_gap = (nmv_cw_sek / weekly_budget_sek) - 1
-    s3.metric("vs Budget", f"{weekly_budget_sek:,.0f} kr", delta=f"{b_gap:.1%} {'Ahead' if b_gap > 0 else 'Behind'}")
-    
+    m4.metric("vs Budget", f"{weekly_budget_sek:,.0f} kr", delta=f"{b_gap:.1%} {'Ahead' if b_gap > 0 else 'Behind'}")
     p_gap = (nmv_cw_sek / weekly_prognos_sek) - 1
-    s4.metric("vs Prognos", f"{weekly_prognos_sek:,.0f} kr", delta=f"{p_gap:.1%} {'Ahead' if p_gap > 0 else 'Behind'}")
-    s5.metric("Current Total", f"{nmv_cw_sek:,.0f} kr")
+    m5.metric("vs Prognos", f"{weekly_prognos_sek:,.0f} kr", delta=f"{p_gap:.1%} {'Ahead' if p_gap > 0 else 'Behind'}")
 
     st.markdown("---")
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Brand Health", "🏆 Top 50 Articles", "📣 Marketing", "🔄 Z-Hybrid"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 Health", "🏆 Top 50", "📣 Marketing", "🌍 Market Dev", "🔄 Z-Hybrid", "📝 Commentary"])
 
     with tab1:
         st.subheader("Health Tracker: YoY Growth (SEK)")
@@ -121,15 +116,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             ly_g = df_ly.groupby(grp)['NMV_SEK'].sum().reset_index().rename(columns={'NMV_SEK': 'LY_kr'})
             m = cw_g.merge(ly_g, on=grp, how='left').fillna(0)
             m['Growth %'] = (m['CW_kr'] - m['LY_kr']) / m['LY_kr'].replace(0, 1)
-            # RESTORED STATUS INDICATORS
             m['Status'] = m['Growth %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
-            
-            col.dataframe(m.sort_values('CW_kr', ascending=False).style.format({
-                "CW_kr": "{:,.0f} kr", "LY_kr": "{:,.0f} kr", "Growth %": "{:.1%}"
-            }), hide_index=True, use_container_width=True)
+            col.dataframe(m.sort_values('CW_kr', ascending=False).style.format({"CW_kr": "{:,.0f} kr", "LY_kr": "{:,.0f} kr", "Growth %": "{:.1%}"}), hide_index=True, use_container_width=True)
 
     with tab2:
-        st.subheader("🏆 Top 50 Articles: Performance & Stock Alerts")
+        # TOP 50 BY REVENUE
+        st.subheader("🏆 Top 50 Articles by NMV")
         inv_var_col = next((c for c in df_inv.columns if 'variant' in c.lower()), 'Article variant')
         name_col = next((c for c in df_inv.columns if any(k in c.lower() for k in ['article_name', 'product title']) and 'partner' not in c.lower()), 'article_name')
         zfs_col = next((c for c in df_inv.columns if 'zfs' in c.lower()), 'sellable_zfs_stock')
@@ -142,15 +134,29 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         cw_art = df_cw.groupby('Article variant')[['NMV_EUR', 'Sold_Units']].sum().reset_index()
         lw_art = df_lw.groupby('Article variant')[['NMV_EUR']].sum().reset_index().rename(columns={'NMV_EUR': 'NMV_LW'})
         top = cw_art.merge(lw_art, on='Article variant', how='left').fillna(0)
-        top['Status sales'] = top.apply(lambda r: "🟢 Up" if r['NMV_EUR'] > r['NMV_LW'] else "🔴 Down", axis=1)
         top = top.merge(inv_map, left_on='Article variant', right_on=inv_var_col, how='left')
-        
-        top = top.rename(columns={name_col: "Article Name", zfs_col: "Stock ZFS", pf_col: "Stock PF", "Sold_Units": "Sold items", "NMV_EUR": "NMV €"})
-        top = top.sort_values('NMV €', ascending=False).head(50)
-        
-        st.dataframe(top[['Status sales', 'Article variant', 'Article Name', 'NMV €', 'Sold items', 'Stock ZFS', 'Stock PF']].style.format({
-            "NMV €": "€{:,.0f}", "Sold items": "{:,.0f}", "Stock ZFS": "{:,.0f}", "Stock PF": "{:,.0f}"
-        }).apply(lambda x: ['background-color: #fff0f0' if (c in ['Stock ZFS', 'Stock PF'] and 0 < v < x['Sold items']) else '' for c, v in x.items()], axis=1), hide_index=True, use_container_width=True)
+        top = top.rename(columns={name_col: "Article Name", zfs_col: "Stock ZFS", pf_col: "Stock PF", "Sold_Units": "Sold", "NMV_EUR": "NMV €"})
+        st.dataframe(top.sort_values('NMV €', ascending=False).head(50)[['Article variant', 'Article Name', 'NMV €', 'Sold', 'Stock ZFS', 'Stock PF']].style.format({"NMV €": "€{:,.0f}"}), hide_index=True, use_container_width=True)
+
+        # TOP 50 BY WISHLIST (NEW)
+        if f_mkt:
+            st.markdown("---")
+            st.subheader("❤️ Top 50 Most Added to Wishlist (Latest Week)")
+            mkt_df = load_csv_robust(f_mkt)
+            mkt_df.columns = [c.replace(' ', '') for c in mkt_df.columns]
+            mkt_df['Wishlist'] = mkt_df['Addtowishlist'].apply(clean_val)
+            mkt_df['Week'] = mkt_df['Week'].apply(clean_val).astype(int)
+            mkt_df['Year'] = mkt_df['Year'].apply(clean_val).astype(int) if 'Year' in mkt_df.columns else 2026
+            
+            latest_week = mkt_df['Week'].max()
+            latest_year = mkt_df['Year'].max()
+            
+            wish_data = mkt_df[(mkt_df['Week'] == latest_week) & (mkt_df['Year'] == latest_year)].groupby('ConfigSKU')['Wishlist'].sum().reset_index()
+            wish_merged = wish_data.merge(inv_map, left_on='ConfigSKU', right_on=inv_var_col, how='left')
+            wish_merged['Total Stock'] = wish_merged[zfs_col] + wish_merged[pf_col]
+            wish_merged = wish_merged.rename(columns={name_col: "Article Name"}).sort_values('Wishlist', ascending=False).head(50)
+            
+            st.dataframe(wish_merged[['ConfigSKU', 'Article Name', 'Wishlist', 'Total Stock', zfs_col, pf_col]].style.format({"Wishlist": "{:,.0f}", "Total Stock": "{:,.0f}"}), hide_index=True, use_container_width=True)
 
     with tab3:
         if f_mkt:
@@ -163,71 +169,79 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             
             mkt['Week'] = mkt['Week'].apply(clean_val).astype(int)
             mkt['Year'] = mkt['Year'].apply(clean_val).astype(int) if 'Year' in mkt.columns else 2026
+            mkt['Month'] = mkt['Month'].apply(clean_val).astype(int) if 'Month' in mkt.columns else 0
+
+            st.subheader("📅 Marketing Period Comparison")
+            comp_mode = st.radio("Comparison Mode", ["Weekly", "Monthly"], horizontal=True)
             
-            weeks = sorted(mkt['Week'].unique())
-            if len(weeks) >= 2:
-                cw_w, lw_w = weeks[-1], weeks[-2]
-                curr_yr = sorted(mkt['Year'].unique())[-1]
-                
-                def get_mkt_stats(y, w):
-                    subset = mkt[(mkt['Year'] == y) & (mkt['Week'] == w)]
-                    s = subset[['Spend', 'GMV', 'Wish', 'Clicks', 'Sold', 'Impressions']].sum()
-                    s['ROAS'] = s['GMV'] / s['Spend'] if s['Spend'] > 0 else 0
-                    s['COS'] = s['Spend'] / s['GMV'] if s['GMV'] > 0 else 0
-                    return s
-
-                s_cw, s_lw = get_mkt_stats(curr_yr, cw_w), get_mkt_stats(curr_yr, lw_w)
-                total_sales_cw_eur = (nmv_cw_sek / ex_rate)
-                total_sales_lw_eur = (nmv_lw_sek / ex_rate)
-                blended_cw = s_cw['Spend'] / total_sales_cw_eur if total_sales_cw_eur > 0 else 0
-                blended_lw = s_lw['Spend'] / total_sales_lw_eur if total_sales_lw_eur > 0 else 0
-                
-                st.subheader(f"Marketing Performance Week {cw_w}")
-                mk1, mk2, mk3, mk4, mk5, mk6 = st.columns(6)
-                
-                mk1.metric("Ad Spend", f"€{s_cw['Spend']:,.0f}", delta=f"{((s_cw['Spend']/s_lw['Spend'])-1):.1%}" if s_lw['Spend']>0 else None, delta_color="inverse")
-                mk2.metric("Total GMV", f"€{s_cw['GMV']:,.0f}", delta=f"{((s_cw['GMV']/s_lw['GMV'])-1):.1%}" if s_lw['GMV']>0 else None)
-                mk3.metric("ROAS", f"{s_cw['ROAS']:,.2f}x", delta=f"{((s_cw['ROAS']/s_lw['ROAS'])-1):.1%}" if s_lw['ROAS']>0 else None)
-                mk4.metric("COS", f"{s_cw['COS']:.1%}", delta=f"{(s_cw['COS'] - s_lw['COS']):.1%}", delta_color="inverse")
-                mk5.metric("Blended COS", f"{blended_cw:.1%}", delta=f"{(blended_cw - blended_lw):.1%}", delta_color="inverse")
-                mk6.metric("Impressions", f"{s_cw['Impressions']:,.0f}", delta=f"{((s_cw['Impressions']/s_lw['Impressions'])-1):.1%}" if s_lw['Impressions']>0 else None)
-
-                st.markdown("---")
-                st.subheader("📣 Campaign Analytics (WoW Comparison)")
-                c_cw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==cw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
-                c_lw = mkt[(mkt['Year']==curr_yr) & (mkt['Week']==lw_w)].groupby('ZMSCampaign')[['Spend', 'GMV']].sum()
-                camp_df = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
-                
-                # Pre-calculate trends to avoid KeyError during styling
-                camp_df['ROAS CW'] = camp_df['GMV'] / camp_df['Spend'].replace(0, 1)
-                camp_df['ROAS LW'] = camp_df['GMV_LW'] / camp_df['Spend_LW'].replace(0, 1)
-                camp_df['COS CW'] = camp_df['Spend'] / camp_df['GMV'].replace(0, 1)
-                camp_df['COS LW'] = camp_df['Spend_LW'] / camp_df['GMV_LW'].replace(0, 1)
-                
-                camp_df['Spend_Red'] = camp_df['Spend'] > camp_df['Spend_LW']
-                camp_df['ROAS_Red'] = camp_df['ROAS CW'] < camp_df['ROAS LW']
-                camp_df['COS_Red'] = camp_df['COS CW'] > camp_df['COS LW']
-
-                def style_mkt_safe(row):
-                    styles = [''] * len(row)
-                    if row['Spend_Red']: styles[row.index.get_loc('Spend')] = 'color: #ff4b4b; font-weight: bold'
-                    if row['ROAS_Red']: styles[row.index.get_loc('ROAS CW')] = 'color: #ff4b4b; font-weight: bold'
-                    if row['COS_Red']: styles[row.index.get_loc('COS CW')] = 'color: #ff4b4b; font-weight: bold'
-                    return styles
-
-                # Display with hidden trend columns used for styling
-                st.dataframe(camp_df[['ZMSCampaign', 'Spend', 'GMV', 'ROAS CW', 'COS CW', 'Spend_Red', 'ROAS_Red', 'COS_Red']].style.format({
-                    'Spend': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.2f}x', 'COS CW': '{:.1%}'
-                }).apply(style_mkt_safe, axis=1), 
-                column_config={"Spend_Red": None, "ROAS_Red": None, "COS_Red": None},
-                hide_index=True, use_container_width=True)
+            col_p1, col_p2 = st.columns(2)
+            if comp_mode == "Weekly":
+                years = sorted(mkt['Year'].unique(), reverse=True)
+                y1 = col_p1.selectbox("Period 1 Year", years, index=0)
+                w1 = col_p1.selectbox("Period 1 Week", sorted(mkt[mkt['Year']==y1]['Week'].unique(), reverse=True), key="w1")
+                y2 = col_p2.selectbox("Period 2 Year", years, index=0 if len(years)==1 else 1)
+                w2 = col_p2.selectbox("Period 2 Week", sorted(mkt[mkt['Year']==y2]['Week'].unique(), reverse=True), key="w2")
+                mkt_p1 = mkt[(mkt['Year']==y1) & (mkt['Week']==w1)]
+                mkt_p2 = mkt[(mkt['Year']==y2) & (mkt['Week']==w2)]
             else:
-                st.warning("Upload a marketing file with at least two weeks of data.")
-        else:
-            st.info("Upload Marketing CSV to view performance.")
+                months = sorted(mkt['Month'].unique(), reverse=True)
+                m1_sel = col_p1.selectbox("Period 1 Month", months)
+                m2_sel = col_p2.selectbox("Period 2 Month", months)
+                mkt_p1 = mkt[mkt['Month'] == m1_sel]
+                mkt_p2 = mkt[mkt['Month'] == m2_sel]
+
+            def get_stats(df_subset):
+                s = df_subset[['Spend', 'GMV', 'Wish', 'Clicks', 'Sold']].sum()
+                s['ROAS'] = s['GMV'] / s['Spend'] if s['Spend'] > 0 else 0
+                return s
+
+            s1, s2 = get_stats(mkt_p1), get_stats(mkt_p2)
+            mk_c1, mk_c2, mk_c3, mk_c4 = st.columns(4)
+            mk_c1.metric("Spend", f"€{s1['Spend']:,.0f}", delta=f"{((s1['Spend']/s2['Spend'])-1):.1%}" if s2['Spend']>0 else None, delta_color="inverse")
+            mk_c2.metric("GMV", f"€{s1['GMV']:,.0f}", delta=f"{((s1['GMV']/s2['GMV'])-1):.1%}" if s2['GMV']>0 else None)
+            mk_c3.metric("ROAS", f"{s1['ROAS']:.2f}x", delta=f"{((s1['ROAS']/s2['ROAS'])-1):.1%}" if s2['ROAS']>0 else None)
+            mk_c4.metric("Wishlist", f"{s1['Wish']:,.0f}", delta=f"{((s1['Wish']/s2['Wish'])-1):.1%}" if s2['Wish']>0 else None)
+
+            st.markdown("---")
+            st.subheader("🚻 Performance per Gender")
+            if 'Gender' in mkt.columns:
+                g_perf = mkt_p1.groupby('Gender')[['Spend', 'GMV']].sum()
+                g_perf['ROAS'] = g_perf['GMV'] / g_perf['Spend'].replace(0, 1)
+                st.dataframe(g_perf.style.format({'Spend': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS': '{:.2f}x'}), use_container_width=True)
 
     with tab4:
-        st.subheader("🔄 Z-Hybrid Performance & Fulfillment Share")
+        st.subheader("🌍 Market Development")
+        if f_market_cw and f_market_lw:
+            df_mcw = load_csv_robust(f_market_cw)
+            df_mlw = load_csv_robust(f_market_lw)
+            
+            for d in [df_mcw, df_mlw]:
+                d['NMV_Clean'] = d['NMV'].apply(clean_val)
+                d['Basket'] = d['Add to basket'].apply(clean_val)
+                d['Sold'] = d['Sold articles'].apply(clean_val)
+                d['Offerable'] = d['Offerable articles'].apply(clean_val)
+                d['Conv'] = d['Conversion rate'].apply(clean_val)
+
+            total_nmv = df_mcw['NMV_Clean'].sum()
+            df_mcw['Market Share'] = df_mcw['NMV_Clean'] / total_nmv if total_nmv > 0 else 0
+            df_mcw['Drop-out Rate'] = (df_mcw['Basket'] - df_mcw['Sold']) / df_mcw['Basket'].replace(0, 1)
+            
+            # Live Articles calculation (from inventory if possible)
+            if 'country' in df_inv.columns:
+                live_map = df_inv[df_inv['visibility'].str.lower() == 'live'].groupby('country').size().to_dict()
+                df_mcw['LIVE Articles'] = df_mcw['Country'].str.lower().map(live_map).fillna(0)
+            
+            comp_market = df_mcw.merge(df_mlw[['Country', 'NMV_Clean']], on='Country', suffixes=('', '_LW'))
+            comp_market['WoW Growth'] = (comp_market['NMV_Clean'] - comp_market['NMV_Clean_LW']) / comp_market['NMV_Clean_LW'].replace(0, 1)
+            
+            st.dataframe(comp_market[['Country', 'NMV_Clean', 'Market Share', 'WoW Growth', 'Offerable', 'Conv', 'Drop-out Rate']].sort_values('NMV_Clean', ascending=False).style.format({
+                'NMV_Clean': '€{:,.0f}', 'Market Share': '{:.1%}', 'WoW Growth': '{:.1%}', 'Conv': '{:.2%}', 'Drop-out Rate': '{:.1%}'
+            }), hide_index=True, use_container_width=True)
+        else:
+            st.info("Upload Market CW and LW files in the sidebar to unlock this tab.")
+
+    with tab5:
+        st.subheader("🔄 Z-Hybrid Performance")
         if f_hybrid:
             hy = load_csv_robust(f_hybrid)
             hy.columns = [c.strip() for c in hy.columns]
@@ -235,15 +249,32 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             if v_col in hy.columns:
                 hy_clean = hy[hy[d_col].str.lower() != 'total'].copy()
                 hy_clean['Sales_CW'] = hy_clean[v_col].apply(clean_val)
-                hy_clean['Sales_LY'] = hy_clean[l_col].apply(clean_val) if l_col in hy_clean.columns else 0.0
                 total_hy = hy_clean['Sales_CW'].sum()
-                total_ly = hy_clean['Sales_LY'].sum()
-                h1, h2, h3 = st.columns(3)
-                h1.metric("Total Z-Hybrid Sales", f"{total_hy:,.0f} kr")
-                h2.metric("Total Zalando Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
-                h3.metric("Hybrid Share", f"{(total_hy/nmv_cw_sek):.1%}", delta=f"{((total_hy/total_ly)-1):.1%} YoY" if total_ly > 0 else None)
-                st.dataframe(hy_clean.groupby([d_col, 'Veckodag'])[['Sales_CW', 'Sales_LY']].sum().reset_index().style.format({
-                    "Sales_CW": "{:,.0f} kr", "Sales_LY": "{:,.0f} kr"
-                }), hide_index=True, use_container_width=True)
+                st.metric("Hybrid Share of Total", f"{(total_hy/nmv_cw_sek):.1%}")
+                st.dataframe(hy_clean.groupby([d_col])[['Sales_CW']].sum(), use_container_width=True)
+
+    with tab6:
+        st.subheader("📝 Strategic Commentary & To-Do List")
+        c_perf = (nmv_cw_sek / nmv_lw_sek) - 1 if nmv_lw_sek > 0 else 0
+        
+        st.markdown("### 🔍 Key Insights")
+        if c_perf > 0:
+            st.success(f"Positive momentum: Sales are up {c_perf:.1%} vs last week. High conversion markets are driving the growth.")
+        else:
+            st.error(f"Sales decline: Performance is down {c_perf:.1%} vs last week. Review high drop-out rate markets.")
+
+        # Wishlist Insight
+        if f_mkt:
+            low_stock_wish = wish_merged[wish_merged['Total Stock'] < 10].shape[0]
+            if low_stock_wish > 0:
+                st.warning(f"Inventory Alert: {low_stock_wish} items in the Top 50 Wishlist have critical stock levels (<10 units).")
+
+        st.markdown("### 🚀 To-Do List (Next Week)")
+        st.write("- [ ] **Restock High-Demand Items:** Prioritize items found in the Top 50 Wishlist table with low 'Total Stock'.")
+        if f_mkt and 's1' in locals():
+            if s1['ROAS'] < 4:
+                st.write("- [ ] **Marketing Optimization:** Current ROAS is below target. Shift budget from low-performing Gender categories to high-GMV segments.")
+        st.write("- [ ] **Market Expansion:** Review markets with high 'Drop-out Rates' - consider adjusting pricing or shipping messaging in those regions.")
+
 else:
     st.info("Awaiting file uploads 1-4 in the sidebar to generate board.")
