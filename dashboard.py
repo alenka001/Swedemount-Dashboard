@@ -190,21 +190,20 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
         st.dataframe(display_df.style.format({'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'}).apply(highlight_stock_alert, axis=1), hide_index=True, use_container_width=True)
 
-    with tabs[2]: # ❤️ WISHLIST (YOUR FIXED SNIPPET)
+    with tabs[2]: # ❤️ Wishlist Top 50
         if f_mkt:
             st.subheader("❤️ Top 50 Most Added to Wishlist (Latest Data)")
             m_wish_raw = load_csv_robust(f_mkt)
             m_wish_raw.columns = [c.replace(' ', '') for c in m_wish_raw.columns]
             
-            # Identify latest week in file
             m_wish_raw['W_Clean'] = m_wish_raw['Week'].apply(clean_val)
             l_week = m_wish_raw['W_Clean'].max()
             
             w_data = m_wish_raw[m_wish_raw['W_Clean'] == l_week].groupby('ConfigSKU')[['Addtowishlist']].sum().reset_index()
             w_data['Addtowishlist'] = w_data['Addtowishlist'].apply(clean_val)
             
-            w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on=inv_sku_col, how='left').sort_values('Addtowishlist', ascending=False).head(50)
-            st.dataframe(w_merged[['ConfigSKU', inv_name_col, 'Addtowishlist', 'Total Stock', zfs_col, pf_col]].style.format(precision=0), hide_index=True, use_container_width=True)
+            w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on='zalando_article_variant', how='left').sort_values('Addtowishlist', ascending=False).head(50)
+            st.dataframe(w_merged[['ConfigSKU', 'article_name', 'Addtowishlist', 'Total Stock', 'sellable_zfs_stock', 'sellable_pf_stock']].style.format(precision=0), hide_index=True, use_container_width=True)
 
     with tabs[3]: # 📣 Marketing Summary & Campaign Table
         if f_mkt:
