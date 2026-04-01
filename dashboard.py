@@ -193,32 +193,103 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on=inv_sku_col, how='left').sort_values('Addtowishlist', ascending=False).head(50)
             st.dataframe(w_merged[['ConfigSKU', inv_name_col, 'Addtowishlist', 'Total Stock', zfs_col, pf_col]].style.format(precision=0), hide_index=True, use_container_width=True)
 
-    with tabs[3]: # Marketing Summary
+    with tabs[3]: # 📣 Marketing Summary & Campaign Table
         if f_mkt:
-            mkt_df = load_csv_robust(f_mkt); mkt_df.columns = [c.replace(' ', '') for c in mkt_df.columns]
-            for c in ['Budgetspent', 'GMV', 'Addtowishlist', 'Clicks', 'Itemssold', 'Viewableadimpressions', 'PDPviews']: mkt_df[c] = mkt_df[c].apply(clean_val)
-            w_list = sorted(mkt_df['Week'].apply(clean_val).unique(), reverse=True)
-            c1, c2 = st.columns(2)
-            s_w1 = c1.selectbox("Active Week", w_list, index=0); s_w2 = c2.selectbox("Comp Week", w_list, index=min(1, len(w_list)-1))
+            st.subheader("📣 Marketing Performance Overview")
+            mkt_df = load_csv_robust(f_mkt)
+            mkt_df.columns = [c.replace(' ', '') for c in mkt_df.columns]
             
-            def get_m_stats(df_sub, nmv_val):
+            # Clean numeric columns
+            m_cols = ['Budgetspent', 'GMV', 'Addtowishlist', 'Clicks', 'Itemssold', 'Viewableadimpressions', 'PDPviews']
+            for c in m_cols: 
+                mkt_df[c] = mkt_df[c].apply(clean_val)
+            
+            # Week Selection
+            mkt_df['W_Clean'] = mkt_df['Week'].apply(clean_val)
+            w_list = sorted(mkt_df['W_Clean'].unique(), reverse=True)
+            
+            col_sel1, col_sel2 = st.columns(2)
+            sel_w1 = col_sel1.selectbox("Active Week", w_list, index=0, key="mkt_w1")
+            sel_w2 = col_sel2.selectbox("Comparison Week", w_list, index=min(1, len(w_list)-1), key="mkt_w2")
+
+            # Data subsets
+            p1 = mkt_df[mkt_df['W_Clean'] == sel_w1]
+            p2 = mkt_df[mkt_df['W_Clean'] == sel_w2]
+
+            def get_m_stats(df_sub, nmv_sek_val):
                 s = df_sub.sum(numeric_only=True)
                 return {
-                    'Spend': s['Budgetspent'], 'GMV': s['GMV'], 'Wish': s['Addtowishlist'], 'PDP': s['PDPviews'], 
-                    'ROAS': s['GMV']/s['Budgetspent'] if s['Budgetspent']>0 else 0, 
-                    'Blended': s['Budgetspent']/(nmv_val/ex_rate) if nmv_val>0 else 0
+                    'Spend': s['Budgetspent'], 
+                    'GMV': s['GMV'], 
+                    'Wish': s['Addtowishlist'], 
+                    'PDP': s['PDPviews'],
+                    'ROAS': s['GMV']/s['Budgetspent'] if s['Budgetspent'] > 0 else 0,
+                    'Blended': s['Budgetspent']/(nmv_sek_val/ex_rate) if nmv_sek_val > 0 else 0
                 }
-            
-            ms1 = get_m_stats(mkt_df[mkt_df['Week'].apply(clean_val) == s_w1], nmv_cw_sek)
-            ms2 = get_m_stats(mkt_df[mkt_df['Week'].apply(clean_val) == s_w2], nmv_lw_sek)
-            
+
+            ms1 = get_m_stats(p1, nmv_cw_sek)
+            ms2 = get_m_stats(p2, nmv_lw_sek)
+
+            # --- Top Metrics Row ---
             r1, r2, r3, r4, r5, r6 = st.columns(6)
-            r1.metric("Spend", f"€{ms1['Spend']:,.0f}", delta=f"{(ms1['Spend']/ms2['Spend']-1):.0%}", delta_color="inverse")
-            r2.metric("GMV", f"€{ms1['GMV']:,.0f}", delta=f"{(ms1['GMV']/ms2['GMV']-1):.0%}")
-            r3.metric("ROAS", f"{ms1['ROAS']:,.0f}x", delta=f"{(ms1['ROAS']-ms2['ROAS']):,.0f}")
-            r4.metric("PDP Views", f"{ms1['PDP']:,.0f}", delta=f"{(ms1['PDP']/ms2['PDP']-1):.0%}")
-            r5.metric("Wishlist", f"{ms1['Wish']:,.0f}", delta=f"{(ms1['Wish']/ms2['Wish']-1):.0%}")
+            r1.metric("Ad Spend", f"€{ms1['Spend']:,.0f}", delta=f"{(ms1['Spend']/ms2['Spend']-1):.0%}" if ms2['Spend']>0 else None, delta_color="inverse")
+            r2.metric("Marketing GMV", f"€{ms1['GMV']:,.0f}", delta=f"{(ms1['GMV']/ms2['GMV']-1):.0%}" if ms2['GMV']>0 else None)
+            r3.metric("Total ROAS", f"{ms1['ROAS']:,.0f}x", delta=f"{(ms1['ROAS']-ms2['ROAS']):,.0f}")
+            r4.metric("PDP Views", f"{ms1['PDP']:,.0f}", delta=f"{(ms1['PDP']/ms2['PDP']-1):.0%}" if ms2['PDP']>0 else None)
+            r5.metric("Wishlist", f"{ms1['Wish']:,.0f}", delta=f"{(ms1['Wish']/ms2['Wish']-1):.0%}" if ms2['Wish']>0 else None)
             r6.metric("Blended COS", f"{ms1['Blended']:.0%}", delta=f"{(ms1['Blended']-ms2['Blended']):.0%}", delta_color="inverse")
+
+            st.markdown("---")
+            
+            # --- Campaign Comparison Table ---
+            st.write("**📣 Campaign Analytics (WoW Comparison)**")
+            
+            c_cw = p1.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
+            c_lw = p2.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
+            
+            # Join weeks
+            camp_tab = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
+            
+            # Calculations
+            camp_tab['ROAS CW'] = camp_tab['GMV'] / camp_tab['Budgetspent'].replace(0, 1)
+            camp_tab['ROAS LW'] = camp_tab['GMV_LW'] / camp_tab['Budgetspent_LW'].replace(0, 1)
+            camp_tab['Delta ROAS'] = camp_tab['ROAS CW'] - camp_tab['ROAS LW']
+            
+            # Clean display dataframe
+            camp_disp = camp_tab[['ZMSCampaign', 'Budgetspent', 'GMV', 'ROAS CW', 'Delta ROAS']]
+            camp_disp = camp_disp.rename(columns={'Budgetspent': 'Spend', 'ROAS CW': 'ROAS'})
+
+            def style_campaign_trends(row):
+                styles = [''] * len(row)
+                # If Delta ROAS is positive, make it green, if negative, red
+                if row['Delta ROAS'] > 0:
+                    styles[row.index.get_loc('Delta ROAS')] = 'color: #28a745; font-weight: bold'
+                elif row['Delta ROAS'] < 0:
+                    styles[row.index.get_loc('Delta ROAS')] = 'color: #dc3545; font-weight: bold'
+                return styles
+
+            st.dataframe(
+                camp_disp.style.format({
+                    'Spend': '€{:,.0f}', 
+                    'GMV': '€{:,.0f}', 
+                    'ROAS': '{:,.0f}x', 
+                    'Delta ROAS': '{:+,.0f}x'
+                }).apply(style_campaign_trends, axis=1), 
+                hide_index=True, 
+                use_container_width=True
+            )
+
+            # --- Gender Breakdown ---
+            if 'Gender' in p1.columns:
+                st.markdown("---")
+                st.write("**🚻 Performance per Gender (Active Week)**")
+                gender_perf = p1.groupby('Gender')[['Budgetspent', 'GMV']].sum().reset_index()
+                gender_perf['ROAS'] = gender_perf['GMV'] / gender_perf['Budgetspent'].replace(0, 1)
+                st.dataframe(
+                    gender_perf.style.format({'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS': '{:,.0f}x'}),
+                    hide_index=True, 
+                    use_container_width=True
+                )
 
     with tabs[4]: # Market Development
         if f_mcw and f_mlw:
