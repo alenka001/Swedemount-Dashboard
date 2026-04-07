@@ -9,7 +9,7 @@ warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 # --- SET PAGE CONFIG ---
 st.set_page_config(page_title="Weekly Strategic Dashboard", layout="wide", page_icon="📊")
 
-# --- CSS FÖR EN PROFESSIONELL DESIGN ---
+# --- CSS FÖR PROFESSIONELL DESIGN (ÅTERSTÄLLD FRÅN MORGONEN) ---
 st.markdown("""
     <style>
     .block-container { padding-top: 1rem; padding-bottom: 0rem; }
@@ -31,20 +31,15 @@ st.markdown("""
         padding: 8px;
         border-radius: 5px;
     }
-    .status-box {
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
-    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ROBUST SIFFERRENSARE (FIXAR € 1 454,95 OCH 20 369) ---
+# --- UTILITIES / DEN AGGRESSIVA SIFFER-TVÄTTEN ---
 def clean_val(val, is_pct=False):
     if pd.isna(val) or val == '' or str(val).lower() == 'undefined': return 0.0
     s = str(val).strip().replace('€', '').replace('kr', '').replace('SEK', '')
     has_pct_sign = '%' in s
-    s = re.sub(r'[\s\xa0]+', '', s)
+    s = re.sub(r'[\s\xa0]+', '', s) # Tar bort alla typer av mellanslag inkl hard spaces
     if not s: return 0.0
     if ',' in s:
         if '.' in s: s = s.replace('.', '') 
@@ -100,7 +95,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     df_ly_raw = load_csv_robust(f_ly)
     df_inv_raw = load_csv_robust(f_inv)
 
-    # 1. Bearbeta Lager
+    # 1. Lager (Variant-nivå)
     inv_sku_col, inv_name_col = 'zalando_article_variant', 'article_name'
     zfs_col, pf_col = 'sellable_zfs_stock', 'sellable_pf_stock'
     df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].str.strip().str.upper()
@@ -131,22 +126,35 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     st.title("🚀 Weekly Strategic Marketplace Board")
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Current NMV", f"€{nmv_cw_sek/ex_rate:,.0f}")
-    m2.metric("vs LW (SEK)", f"{nmv_cw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1):.1%}")
-    m3.metric("vs LY (SEK)", f"{nmv_ly_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1):.1%}")
-    m4.metric("Budget Reach", f"{(nmv_cw_sek / weekly_budget_sek):.1%}", delta=f"Mål: {weekly_budget_sek:,.0f} kr")
-    m5.metric("Prognos Reach", f"{(nmv_cw_sek / weekly_prognos_sek):.1%}", delta=f"Mål: {weekly_prognos_sek:,.0f} kr")
+    # ROW 1: EUR PERFORMANCE (ÅTERSTÄLLD)
+    st.subheader("🇪🇺 Row 1: EUR Performance")
+    e1, e2, e3 = st.columns(3)
+    e1.metric("Current NMV", f"€{nmv_cw_sek/ex_rate:,.0f}")
+    e2.metric("LW NMV", f"€{nmv_lw_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1):.1%} vs LW")
+    e3.metric("LY NMV", f"€{nmv_ly_sek/ex_rate:,.0f}", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1):.1%} vs LY")
+
+    # ROW 2: SEK PERFORMANCE & TARGET GAPS (ÅTERSTÄLLD)
+    st.subheader("🇸🇪 Row 2: SEK Performance & Target Gaps")
+    s1, s2, s3, s4, s5 = st.columns(5)
+    s1.metric("LW SEK", f"{nmv_lw_sek:,.0f} kr")
+    s2.metric("LY SEK", f"{nmv_ly_sek:,.0f} kr")
+    
+    b_reach = (nmv_cw_sek / weekly_budget_sek)
+    s3.metric("vs Budget", f"{weekly_budget_sek:,.0f} kr", delta=f"{b_reach:.1%} Reach")
+    
+    p_reach = (nmv_cw_sek / weekly_prognos_sek)
+    s4.metric("vs Prognos", f"{weekly_prognos_sek:,.0f} kr", delta=f"{p_reach:.1%} Reach")
+    s5.metric("Current Total", f"{nmv_cw_sek:,.0f} kr")
 
     st.markdown("---")
-    tabs = st.tabs(["📈 Hälsa", "🏆 Topp 50 Omsättning", "❤️ Wishlist Topp 50", "📣 Marknadsföring", "🌍 Marknadsutveckling", "🔄 Z-Hybrid", "📝 Analys"])
+    tabs = st.tabs(["📈 Hälsa", "🏆 Top 50 Revenue", "❤️ Wishlist Top 50", "📣 Marknadsföring", "🌍 Marknadsutveckling", "🔄 Z-Hybrid", "📝 Analys"])
 
-    # Globala variabler för analys
-    m_comp = None
-    camp_tab = None
-    p1 = None
+    # Hjälpvariabler för Analys-tab
+    m_comp_analysis = None
+    camp_tab_analysis = None
+    p1_active_marketing = None
 
-    with tabs[0]: # Hälsa
+    with tabs[0]: # HÄLSA (ÅTERSTÄLLD)
         st.subheader("Business Health Tracker (YoY Growth)")
         c1, c2 = st.columns(2)
         for col, grp in zip([c1, c2], ['Brand', 'Article type']):
@@ -157,8 +165,8 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             h_m['Status'] = h_m['Growth %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
             col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({"CW_EUR": "€{:,.0f}", "LY_EUR": "€{:,.0f}", "Growth %": "{:.1%}"}), hide_index=True, use_container_width=True)
 
-    with tabs[1]: # Topp 50
-        st.subheader("🏆 Topp 50 Revenue Performance & Stock Alerts")
+    with tabs[1]: # TOP 50 (ÅTERSTÄLLD MED RÖD MARKERING)
+        st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
         cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
         lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index().rename(columns={'join_key': 'Zalando article variant'})
@@ -168,9 +176,32 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
         t50_f = t50.sort_values('Rank_CW').head(50)
         disp = t50_f.rename(columns={'join_key': 'SKU', inv_name_col: 'Article Name', 'NMV_EUR': 'NMV €', zfs_col: 'Stock ZFS', pf_col: 'Stock PF'})
-        st.dataframe(disp[['Status', 'SKU', 'Article Name', 'NMV €', 'Sold', 'Stock ZFS', 'Stock PF']].style.format({'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'}), hide_index=True, use_container_width=True)
+        
+        def highlight_stock_alert(row):
+            styles = [''] * len(row)
+            sold_val = row['Sold']
+            if 0 < row['Stock ZFS'] < sold_val: styles[row.index.get_loc('Stock ZFS')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
+            if 0 < row['Stock PF'] < sold_val: styles[row.index.get_loc('Stock PF')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
+            return styles
 
-    with tabs[3]: # Marknadsföring
+        st.dataframe(disp[['Status', 'SKU', 'Article Name', 'NMV €', 'Sold', 'Stock ZFS', 'Stock PF']].style.format({
+            'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'
+        }).apply(highlight_stock_alert, axis=1), hide_index=True, use_container_width=True)
+
+    with tabs[2]: # WISHLIST TOP 50 (ÅTERSTÄLLD)
+        if f_mkt:
+            st.subheader("❤️ Top 50 Most Added to Wishlist (Latest Week)")
+            m_wish = load_csv_robust(f_mkt)
+            m_wish.columns = [c.replace(' ', '') for c in m_wish.columns]
+            m_wish['W_Clean'] = m_wish['Week'].apply(clean_val)
+            m_wish['Wish_Numeric'] = m_wish['Addtowishlist'].apply(clean_val)
+            l_week = m_wish['W_Clean'].max()
+            w_data = m_wish[m_wish['W_Clean'] == l_week].groupby('ConfigSKU')[['Wish_Numeric']].sum().reset_index()
+            w_data['ConfigSKU'] = w_data['ConfigSKU'].str.strip().str.upper()
+            w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on=inv_sku_col, how='left').sort_values('Wish_Numeric', ascending=False).head(50)
+            st.dataframe(w_merged[['ConfigSKU', inv_name_col, 'Wish_Numeric', 'Total Stock', zfs_col, pf_col]].style.format(precision=0), hide_index=True, use_container_width=True)
+
+    with tabs[3]: # MARKNADSFÖRING (ÅTERSTÄLLD MED ALLA KPI:ER & DELTAS)
         if f_mkt:
             st.subheader("📣 Marketing Performance Overview")
             mkt_df = load_csv_robust(f_mkt)
@@ -182,96 +213,123 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             
             mkt_df['W_Clean'] = mkt_df['Week'].apply(clean_val)
             w_list = sorted(mkt_df['W_Clean'].unique(), reverse=True)
-            sel_w1 = st.selectbox("Aktiv Vecka", w_list, index=0)
-            sel_w2 = st.selectbox("Jämförelse Vecka", w_list, index=min(1, len(w_list)-1))
+            sel_w1 = st.selectbox("Aktiv Vecka", w_list, index=0, key='mkt_active')
+            sel_w2 = st.selectbox("Jämförelse Vecka", w_list, index=min(1, len(w_list)-1), key='mkt_compare')
             p1, p2 = mkt_df[mkt_df['W_Clean'] == sel_w1], mkt_df[mkt_df['W_Clean'] == sel_w2]
+            p1_active_marketing = p1
 
-            # Summeringslogik... (samma som tidigare)
-            s1, s2 = p1[m_cols].sum(), p2[m_cols].sum()
-            ms1 = {'Spend': s1['Budgetspent'], 'GMV': s1['GMV'], 'ROAS': s1['GMV']/s1['Budgetspent'] if s1['Budgetspent']>0 else 0}
-            ms2 = {'Spend': s2['Budgetspent'], 'GMV': s2['GMV'], 'ROAS': s2['GMV']/s2['Budgetspent'] if s2['Budgetspent']>0 else 0}
+            def get_m_stats(df_sub, nmv_sek_val):
+                s = df_sub[m_cols].sum()
+                nmv_eur = (nmv_sek_val/ex_rate) if nmv_sek_val > 0 else 0
+                return {
+                    'Spend': s['Budgetspent'], 'GMV': s['GMV'], 'Wish': s['Addtowishlist'], 
+                    'PDP': s['PDPviews'], 'Impressions': s['Viewableadimpressions'],
+                    'ROAS': s['GMV']/s['Budgetspent'] if s['Budgetspent'] > 0 else 0,
+                    'COS': s['Budgetspent']/s['GMV'] if s['GMV'] > 0 else 0,
+                    'Blended': s['Budgetspent']/nmv_eur if nmv_eur > 0 else 0
+                }
 
-            r1, r2, r3 = st.columns(3)
+            ms1, ms2 = get_m_stats(p1, nmv_cw_sek), get_m_stats(p2, nmv_lw_sek)
+            r1, r2, r3, r4, r5, r6 = st.columns(6)
             r1.metric("Ad Spend", f"€{ms1['Spend']:,.0f}", delta=f"{(ms1['Spend']/ms2['Spend']-1):.0%}" if ms2['Spend']>0 else None, delta_color="inverse")
-            r2.metric("Total ROAS", f"{ms1['ROAS']:,.1f}x", delta=f"{(ms1['ROAS']-ms2['ROAS']):.1f}x")
-            r3.metric("Impressions", f"{s1['Viewableadimpressions']:,.0f}")
+            r2.metric("Total GMV", f"€{ms1['GMV']:,.0f}", delta=f"{(ms1['GMV']/ms2['GMV']-1):.0%}" if ms2['GMV']>0 else None)
+            r3.metric("Total ROAS", f"{ms1['ROAS']:,.1f}x", delta=f"{(ms1['ROAS']-ms2['ROAS']):.1f}x")
+            r4.metric("COS", f"{ms1['COS']:.1%}", delta=f"{(ms1['COS']-ms2['COS']):.1%}", delta_color="inverse")
+            r5.metric("Blended COS", f"{ms1['Blended']:.1%}", delta=f"{(ms1['Blended']-ms2['Blended']):.1%}", delta_color="inverse")
+            r6.metric("Impressions", f"{ms1['Impressions']:,.0f}", delta=f"{(ms1['Impressions']/ms2['Impressions']-1):.0%}" if ms2['Impressions']>0 else None)
 
-            # Kampanjtabell för analys
+            st.markdown("---")
             c_cw = p1.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
             c_lw = p2.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
             camp_tab = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
             camp_tab['ROAS CW'] = camp_tab['GMV'] / camp_tab['Budgetspent'].replace(0, 1)
             camp_tab['ROAS LW'] = camp_tab['GMV_LW'] / camp_tab['Budgetspent_LW'].replace(0, 1)
             camp_tab['Delta ROAS'] = camp_tab['ROAS CW'] - camp_tab['ROAS LW']
-            st.dataframe(camp_tab[['ZMSCampaign', 'Budgetspent', 'GMV', 'ROAS CW', 'Delta ROAS']].style.format({'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.1f}x', 'Delta ROAS': '{:+.1f}x'}), hide_index=True, use_container_width=True)
+            camp_tab_analysis = camp_tab
 
-    with tabs[4]: # Marknadsutveckling
+            def style_trends(row):
+                styles = [''] * len(row)
+                idx = row.index.get_loc('Delta ROAS')
+                if row['Delta ROAS'] > 0: styles[idx] = 'color: #28a745; font-weight: bold'
+                elif row['Delta ROAS'] < 0: styles[idx] = 'color: #dc3545; font-weight: bold'
+                return styles
+
+            st.dataframe(camp_tab[['ZMSCampaign', 'Budgetspent', 'GMV', 'ROAS CW', 'Delta ROAS']].style.format({
+                'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.1f}x', 'Delta ROAS': '{:+.1f}x'
+            }).apply(style_trends, axis=1), hide_index=True, use_container_width=True)
+
+    with tabs[4]: # MARKNADSUTVECKLING (ÅTERSTÄLLD MED SHARE % & WOW)
         if f_mcw and f_mlw:
+            st.subheader("🌍 Marknadsutveckling per Land")
             mcw, mlw = load_csv_robust(f_mcw), load_csv_robust(f_mlw)
             for d in [mcw, mlw]: d['NMV_C'] = d['NMV'].apply(clean_val)
+            mcw['Share %'] = mcw['NMV_C'] / mcw['NMV_C'].sum()
             m_comp = mcw.merge(mlw[['Country', 'NMV_C']], on='Country', suffixes=('', '_LW'))
             m_comp['Growth'] = (m_comp['NMV_C'] / m_comp['NMV_C_LW'].replace(0, 1)) - 1
-            st.dataframe(m_comp[['Country', 'NMV_C', 'Growth']].style.format({'NMV_C': '€{:,.0f}', 'Growth': '{:+.1%}'}), hide_index=True, use_container_width=True)
+            m_comp_analysis = m_comp
+            st.dataframe(m_comp[['Country', 'NMV_C', 'Share %', 'Growth']].style.format({
+                'NMV_C': '€{:,.0f}', 'Share %': '{:.1%}', 'Growth': '{:+.1%}'
+            }), hide_index=True, use_container_width=True)
 
-    with tabs[6]: # ANALYS (UPPDATERAD)
-        st.subheader("📝 Weekly Focus Analysis & Deep Dive")
-        
-        # --- RAD 1: BÄSTA PERFORMANS ---
-        st.markdown("### 🏆 Veckans Vinnare")
+    with tabs[5]: # Z-HYBRID (ÅTERSTÄLLD)
+        if f_hybrid:
+            st.subheader("🔄 Z-Hybrid Försäljningsandel")
+            hy = load_csv_robust(f_hybrid)
+            hy.columns = [c.strip() for c in hy.columns]
+            v_col, d_col = 'Ordervärde ex.moms', 'Datum'
+            if v_col in hy.columns:
+                hy_c = hy[hy[d_col].str.lower() != 'total'].copy()
+                hy_c['Sales_CW'] = hy_c[v_col].apply(clean_val)
+                total_hy = hy_c['Sales_CW'].sum()
+                share = (total_hy / nmv_cw_sek) if nmv_cw_sek > 0 else 0
+                st.metric("Total Hybrid Sales (SEK)", f"{total_hy:,.0f} kr", f"{share:.1%} av totalen")
+                st.dataframe(hy_c.groupby([d_col, 'Veckodag'])['Sales_CW'].sum().reset_index().style.format({"Sales_CW": "{:,.0f} kr"}), hide_index=True, use_container_width=True)
+
+    with tabs[6]: # ANALYS (ÅTERSTÄLLD MED VINNARE/UTMANARE)
+        st.subheader("📝 Weekly Strategic Focus")
         v1, v2, v3 = st.columns(3)
-        
         with v1: # Bästa Marknad
-            if m_comp is not None:
-                best_m = m_comp.sort_values('Growth', ascending=False).iloc[0]
-                st.info(f"**Bästa Marknad (NMV %)**\n\n🌍 {best_m['Country']}\n\nÖkning: {best_m['Growth']:.1%}")
-            else: st.write("Ladda upp marknadsdata")
-
+            if m_comp_analysis is not None:
+                best_m = m_comp_analysis.sort_values('Growth', ascending=False).iloc[0]
+                st.success(f"**Bästa Marknad (Growth)**\n\n🌍 {best_m['Country']}\n\nÖkning: {best_m['Growth']:.1%}")
         with v2: # Bästa Kampanj
-            if camp_tab is not None:
-                best_c = camp_tab.sort_values('Delta ROAS', ascending=False).iloc[0]
-                st.info(f"**Bästa Kampanj (ROAS)**\n\n📣 {best_c['ZMSCampaign']}\n\nFörbättring: +{best_c['Delta ROAS']:.1f}x")
-            else: st.write("Ladda upp kampanjdata")
-
-        with v3: # Topp 5 Artiklar PDP
-            if p1 is not None:
-                st.info("**Topp 5 Artiklar (PDP Views)**")
-                top_pdp = p1.groupby('ConfigSKU')['PDPviews'].sum().sort_values(ascending=False).head(5)
+            if camp_tab_analysis is not None:
+                best_c = camp_tab_analysis.sort_values('Delta ROAS', ascending=False).iloc[0]
+                st.success(f"**Bästa Kampanj (ROAS)**\n\n📣 {best_c['ZMSCampaign']}\n\nFörbättring: +{best_c['Delta ROAS']:.1f}x")
+        with v3: # Topp 5 PDP
+            if p1_active_marketing is not None:
+                st.success("**Topp 5 Artiklar (PDP Views)**")
+                top_pdp = p1_active_marketing.groupby('ConfigSKU')['PDPviews'].sum().sort_values(ascending=False).head(5)
                 for sku, val in top_pdp.items():
                     name = inv_map[inv_map[inv_sku_col] == sku][inv_name_col].values[0] if sku in inv_map[inv_sku_col].values else sku
                     st.write(f"👁️ {val:,.0f} - {name}")
 
-        # --- RAD 2: UTMANINGAR ---
-        st.markdown("### ⚠️ Veckans Utmaningar")
         u1, u2, u3 = st.columns(3)
-
         with u1: # Sämsta Marknad
-            if m_comp is not None:
-                worst_m = m_comp.sort_values('Growth', ascending=True).iloc[0]
-                st.warning(f"**Utmanande Marknad (NMV %)**\n\n🌍 {worst_m['Country']}\n\nTapp: {worst_m['Growth']:.1%}")
-
+            if m_comp_analysis is not None:
+                worst_m = m_comp_analysis.sort_values('Growth', ascending=True).iloc[0]
+                st.error(f"**Utmanande Marknad**\n\n🌍 {worst_m['Country']}\n\nTapp: {worst_m['Growth']:.1%}")
         with u2: # Sämsta Kampanj
-            if camp_tab is not None:
-                worst_c = camp_tab.sort_values('Delta ROAS', ascending=True).iloc[0]
-                st.warning(f"**Utmanande Kampanj (ROAS)**\n\n📣 {worst_c['ZMSCampaign']}\n\nTapp: {worst_c['Delta ROAS']:.1f}x")
-
-        with u3: # Sämsta 5 Artiklar PDP
-            if p1 is not None:
-                st.warning("**Utmanande 5 Artiklar (Lägst PDP Views)**")
-                low_pdp = p1[p1['PDPviews'] > 0].groupby('ConfigSKU')['PDPviews'].sum().sort_values(ascending=True).head(5)
+            if camp_tab_analysis is not None:
+                worst_c = camp_tab_analysis.sort_values('Delta ROAS', ascending=True).iloc[0]
+                st.error(f"**Utmanande Kampanj**\n\n📣 {worst_c['ZMSCampaign']}\n\nTapp: {worst_c['Delta ROAS']:.1f}x")
+        with u3: # Sämsta 5 PDP
+            if p1_active_marketing is not None:
+                st.error("**Utmanande 5 Artiklar (Låga PDP)**")
+                low_pdp = p1_active_marketing[p1_active_marketing['PDPviews'] > 0].groupby('ConfigSKU')['PDPviews'].sum().sort_values(ascending=True).head(5)
                 for sku, val in low_pdp.items():
                     name = inv_map[inv_map[inv_sku_col] == sku][inv_name_col].values[0] if sku in inv_map[inv_sku_col].values else sku
                     st.write(f"📉 {val:,.0f} - {name}")
 
         st.markdown("---")
-        # Behåll de gamla varningarna också
         c_a1, c_a2 = st.columns(2)
         with c_a1:
-            st.success("**Topp Omsättning (Total)**")
-            for i, r in t50_f.head(3).iterrows(): st.write(f"💰 {r['NMV €']:,.0f} € - {r['Article Name']}")
+            st.info("**Topp 3 Omsättning (Total)**")
+            for i, r in t50_f.head(3).iterrows(): st.write(f"💰 €{r['NMV_EUR']:,.0f} - {r[inv_name_col]}")
         with c_a2:
-            st.error("**Kritiskt Lagersaldo**")
+            st.error("**Lager-Attention**")
             crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
-            for i, r in crit.iterrows(): st.write(f"🚨 {r['Article Name']} (Lager: {r['Total Stock']:.0f}st)")
+            for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
 else:
-    st.info("Vänligen ladda upp Försäljning CW, LW, LY och Lagerrapport för att starta.")
+    st.info("Vänligen ladda upp data i sidomenyn för att generera din dashboard.")
