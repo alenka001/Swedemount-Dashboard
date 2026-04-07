@@ -101,7 +101,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     zfs_col = 'sellable_zfs_stock'
     pf_col = 'sellable_pf_stock'
 
-    # Create a clean map from your Inventory File
     df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].str.strip().str.upper()
     df_inv_raw[zfs_col] = df_inv_raw[zfs_col].apply(clean_val)
     df_inv_raw[pf_col] = df_inv_raw[pf_col].apply(clean_val)
@@ -113,11 +112,20 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     }).reset_index()
     inv_map['Total Stock'] = inv_map[zfs_col] + inv_map[pf_col]
     
-    # 2. Process Sales - Ensure join_key uses Zalando Variant ID
+    # 2. Process Sales - Robust Column Lookup to fix KeyError
     def process_sales(df):
-        df['NMV_EUR'] = df['NMV'].apply(clean_val)
-        df['Sold'] = df[next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')].apply(clean_val)
-        df['join_key'] = df['Zalando article variant']
+        nmv_col = next((c for c in df.columns if c.lower() == 'nmv'), 'NMV')
+        df['NMV_EUR'] = df[nmv_col].apply(clean_val)
+        sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
+        df['Sold'] = df[sold_col].apply(clean_val)
+        
+        # Robust lookup for SKU column
+        sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), 'Zalando article variant')
+        df['join_key'] = df[sku_col]
+        df['Zalando article variant'] = df[sku_col] # Keep for later joins
+
+        if 'Article variant' not in df.columns:
+            df['Article variant'] = df[next((c for c in df.columns if c.lower() == 'article variant'), sku_col)]
         return df
 
     df_cw = process_sales(df_cw_raw)
@@ -130,24 +138,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     st.title("🚀 Weekly Strategic Marketplace Board")
 
-    # Metrics Row: Performance % toward Budget and Prognos
     m1, m2, m3, m4, m5 = st.columns(5)
-    
-    # 1. Current NMV in EUR
     m1.metric("Current NMV", f"€{nmv_cw_sek/ex_rate:,.0f}")
-    
-    # 2. vs Last Week (Growth %)
     m2.metric("vs LW (SEK)", f"{nmv_cw_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_lw_sek)-1):.1%}")
-    
-    # 3. vs Last Year (Growth %)
     m3.metric("vs LY (SEK)", f"{nmv_ly_sek:,.0f} kr", delta=f"{((nmv_cw_sek/nmv_ly_sek)-1):.1%}")
-    
-    # 4. Performance vs Budget (%)
     b_reach = (nmv_cw_sek / weekly_budget_sek)
     m4.metric("Budget Reach", f"{b_reach:.1%}", delta=f"Target: {weekly_budget_sek:,.0f} kr")
-    
-    # 5. Performance vs Prognos (%)
-    # This shows "how good or bad we are performing" relative to the goal
     p_reach = (nmv_cw_sek / weekly_prognos_sek)
     m5.metric("Prognos Reach", f"{p_reach:.1%}", delta=f"Target: {weekly_prognos_sek:,.0f} kr")
 
@@ -167,11 +163,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 "CW_EUR": "€{:,.0f}", "LY_EUR": "€{:,.0f}", "Growth %": "{:.1%}"
             }), hide_index=True, use_container_width=True)
 
-    with tabs[1]: # 🏆 Top 50 Revenue (CORRECTED JOIN)
+    with tabs[1]: # 🏆 Top 50 Revenue
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
         cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
-        lw_top = df_lw.groupby(['Zalando article variant'])[['NMV_EUR']].sum().reset_index()
+        lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index()
+        lw_top = lw_top.rename(columns={'join_key': 'Zalando article variant'})
         lw_top['Rank_LW'] = lw_top['NMV_EUR'].rank(ascending=False, method='min')
         
         t50 = cw_top.merge(lw_top[['Zalando article variant', 'Rank_LW']], left_on='join_key', right_on='Zalando article variant', how='left')
@@ -192,163 +189,82 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
         st.dataframe(display_df.style.format({'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'}).apply(highlight_stock_alert, axis=1), hide_index=True, use_container_width=True)
 
-    with tabs[2]: # ❤️ Wishlist Top 50
+    with tabs[2]: # Wishlist
         if f_mkt:
             st.subheader("❤️ Top 50 Most Added to Wishlist (Latest Data)")
             m_wish_raw = load_csv_robust(f_mkt)
-            
-            # Standardize column names (remove spaces)
             m_wish_raw.columns = [c.replace(' ', '') for c in m_wish_raw.columns]
-            
-            # --- CRITICAL FIX: Clean data BEFORE grouping ---
-            # 1. Convert 'Week' and 'Addtowishlist' to actual numbers
             m_wish_raw['W_Clean'] = m_wish_raw['Week'].apply(clean_val)
             m_wish_raw['Wish_Numeric'] = m_wish_raw['Addtowishlist'].apply(clean_val)
-            
-            # 2. Identify the latest week available (e.g., 13.0)
             l_week = m_wish_raw['W_Clean'].max()
-            
-            # 3. Filter for the latest week and group by SKU
-            # We sum the Numeric column so 264 is recognized as larger than 5
             w_data = m_wish_raw[m_wish_raw['W_Clean'] == l_week].groupby('ConfigSKU')[['Wish_Numeric']].sum().reset_index()
-            
-            # 4. Clean SKU keys for a perfect match with Inventory
             w_data['ConfigSKU'] = w_data['ConfigSKU'].str.strip().str.upper()
-            
-            # 5. Merge with the Inventory Map (ensure inv_sku_col is 'zalando_article_variant')
-            # This brings in the correct Article Names and Stock levels
-            w_merged = w_data.merge(
-                inv_map, 
-                left_on='ConfigSKU', 
-                right_on='zalando_article_variant', 
-                how='left'
-            ).sort_values('Wish_Numeric', ascending=False).head(50)
-            
-            # 6. Final display preparation
+            w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on='zalando_article_variant', how='left').sort_values('Wish_Numeric', ascending=False).head(50)
             w_disp = w_merged.rename(columns={'Wish_Numeric': 'Add to wishlist'})
-            
-            # Column variables from your inventory logic
-            name_col = 'article_name'
-            zfs_col = 'sellable_zfs_stock'
-            pf_col = 'sellable_pf_stock'
-
-            st.dataframe(
-                w_disp[[
-                    'ConfigSKU', 
-                    name_col, 
-                    'Add to wishlist', 
-                    'Total Stock', 
-                    zfs_col, 
-                    pf_col
-                ]].style.format(precision=0), 
-                hide_index=True, 
-                use_container_width=True
-            )
+            st.dataframe(w_disp[['ConfigSKU', inv_name_col, 'Add to wishlist', 'Total Stock', zfs_col, pf_col]].style.format(precision=0), hide_index=True, use_container_width=True)
         else:
             st.info("Please upload the Marketing Full (CSV) to see Wishlist data.")
 
-    with tabs[3]: # 📣 Marketing Summary & Campaign Table
+    with tabs[3]: # Marketing Summary
         if f_mkt:
             st.subheader("📣 Marketing Performance Overview")
             mkt_df = load_csv_robust(f_mkt)
             mkt_df.columns = [c.replace(' ', '') for c in mkt_df.columns]
-            
-            # Clean numeric columns
             m_cols = ['Budgetspent', 'GMV', 'Addtowishlist', 'Clicks', 'Itemssold', 'Viewableadimpressions', 'PDPviews']
-            for c in m_cols: 
-                mkt_df[c] = mkt_df[c].apply(clean_val)
-            
-            # Week Selection
+            for c in m_cols: mkt_df[c] = mkt_df[c].apply(clean_val)
             mkt_df['W_Clean'] = mkt_df['Week'].apply(clean_val)
             w_list = sorted(mkt_df['W_Clean'].unique(), reverse=True)
-            
             col_sel1, col_sel2 = st.columns(2)
             sel_w1 = col_sel1.selectbox("Active Week", w_list, index=0, key="mkt_w1")
             sel_w2 = col_sel2.selectbox("Comparison Week", w_list, index=min(1, len(w_list)-1), key="mkt_w2")
-
-            # Data subsets
             p1 = mkt_df[mkt_df['W_Clean'] == sel_w1]
             p2 = mkt_df[mkt_df['W_Clean'] == sel_w2]
-
+            
             def get_m_stats(df_sub, nmv_sek_val):
                 s = df_sub.sum(numeric_only=True)
+                total_nmv_eur = (nmv_sek_val/ex_rate) if nmv_sek_val > 0 else 0
                 return {
-                    'Spend': s['Budgetspent'], 
-                    'GMV': s['GMV'], 
-                    'Wish': s['Addtowishlist'], 
-                    'PDP': s['PDPviews'],
+                    'Spend': s['Budgetspent'], 'GMV': s['GMV'], 'Wish': s['Addtowishlist'], 'PDP': s['PDPviews'],
+                    'Impressions': s['Viewableadimpressions'],
                     'ROAS': s['GMV']/s['Budgetspent'] if s['Budgetspent'] > 0 else 0,
-                    'Blended': s['Budgetspent']/(nmv_sek_val/ex_rate) if nmv_sek_val > 0 else 0
+                    'COS': s['Budgetspent']/s['GMV'] if s['GMV'] > 0 else 0,
+                    'Blended': s['Budgetspent']/total_nmv_eur if total_nmv_eur > 0 else 0
                 }
-
-            ms1 = get_m_stats(p1, nmv_cw_sek)
-            ms2 = get_m_stats(p2, nmv_lw_sek)
-
-            # --- Top Metrics Row ---
+            
+            ms1 = get_m_stats(p1, nmv_cw_sek); ms2 = get_m_stats(p2, nmv_lw_sek)
             r1, r2, r3, r4, r5, r6 = st.columns(6)
             r1.metric("Ad Spend", f"€{ms1['Spend']:,.0f}", delta=f"{(ms1['Spend']/ms2['Spend']-1):.0%}" if ms2['Spend']>0 else None, delta_color="inverse")
             r2.metric("Marketing GMV", f"€{ms1['GMV']:,.0f}", delta=f"{(ms1['GMV']/ms2['GMV']-1):.0%}" if ms2['GMV']>0 else None)
-            r3.metric("Total ROAS", f"{ms1['ROAS']:,.0f}x", delta=f"{(ms1['ROAS']-ms2['ROAS']):,.0f}")
-            r4.metric("PDP Views", f"{ms1['PDP']:,.0f}", delta=f"{(ms1['PDP']/ms2['PDP']-1):.0%}" if ms2['PDP']>0 else None)
-            r5.metric("Wishlist", f"{ms1['Wish']:,.0f}", delta=f"{(ms1['Wish']/ms2['Wish']-1):.0%}" if ms2['Wish']>0 else None)
-            r6.metric("Blended COS", f"{ms1['Blended']:.0%}", delta=f"{(ms1['Blended']-ms2['Blended']):.0%}", delta_color="inverse")
+            r3.metric("Total ROAS", f"{ms1['ROAS']:,.1f}x", delta=f"{(ms1['ROAS']-ms2['ROAS']):.1f}x")
+            r4.metric("COS", f"{ms1['COS']:.1%}", delta=f"{(ms1['COS']-ms2['COS']):.1%}", delta_color="inverse")
+            r5.metric("Blended COS", f"{ms1['Blended']:.1%}", delta=f"{(ms1['Blended']-ms2['Blended']):.1%}", delta_color="inverse")
+            r6.metric("Impressions", f"{ms1['Impressions']:,.0f}", delta=f"{(ms1['Impressions']/ms2['Impressions']-1):.0%}" if ms2['Impressions']>0 else None)
 
             st.markdown("---")
-            
-            # --- Campaign Comparison Table ---
-            st.write("**📣 Campaign Analytics (WoW Comparison)**")
-            
             c_cw = p1.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
             c_lw = p2.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
-            
-            # Join weeks
             camp_tab = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
-            
-            # Calculations
             camp_tab['ROAS CW'] = camp_tab['GMV'] / camp_tab['Budgetspent'].replace(0, 1)
             camp_tab['ROAS LW'] = camp_tab['GMV_LW'] / camp_tab['Budgetspent_LW'].replace(0, 1)
             camp_tab['Delta ROAS'] = camp_tab['ROAS CW'] - camp_tab['ROAS LW']
             
-            # Clean display dataframe
-            camp_disp = camp_tab[['ZMSCampaign', 'Budgetspent', 'GMV', 'ROAS CW', 'Delta ROAS']]
-            camp_disp = camp_disp.rename(columns={'Budgetspent': 'Spend', 'ROAS CW': 'ROAS'})
-
             def style_campaign_trends(row):
                 styles = [''] * len(row)
-                # If Delta ROAS is positive, make it green, if negative, red
-                if row['Delta ROAS'] > 0:
-                    styles[row.index.get_loc('Delta ROAS')] = 'color: #28a745; font-weight: bold'
-                elif row['Delta ROAS'] < 0:
-                    styles[row.index.get_loc('Delta ROAS')] = 'color: #dc3545; font-weight: bold'
+                if row['Delta ROAS'] > 0: styles[row.index.get_loc('Delta ROAS')] = 'color: #28a745; font-weight: bold'
+                elif row['Delta ROAS'] < 0: styles[row.index.get_loc('color: #dc3545; font-weight: bold')]
                 return styles
 
-            st.dataframe(
-                camp_disp.style.format({
-                    'Spend': '€{:,.0f}', 
-                    'GMV': '€{:,.0f}', 
-                    'ROAS': '{:,.0f}x', 
-                    'Delta ROAS': '{:+,.0f}x'
-                }).apply(style_campaign_trends, axis=1), 
-                hide_index=True, 
-                use_container_width=True
-            )
-
-            # --- Gender Breakdown ---
-            if 'Gender' in p1.columns:
-                st.markdown("---")
-                st.write("**🚻 Performance per Gender (Active Week)**")
-                gender_perf = p1.groupby('Gender')[['Budgetspent', 'GMV']].sum().reset_index()
-                gender_perf['ROAS'] = gender_perf['GMV'] / gender_perf['Budgetspent'].replace(0, 1)
-                st.dataframe(
-                    gender_perf.style.format({'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS': '{:,.0f}x'}),
-                    hide_index=True, 
-                    use_container_width=True
-                )
+            st.dataframe(camp_tab[['ZMSCampaign', 'Budgetspent', 'GMV', 'ROAS CW', 'Delta ROAS']].style.format({
+                'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.1f}x', 'Delta ROAS': '{:+.1f}x'
+            }).apply(style_campaign_trends, axis=1), hide_index=True, use_container_width=True)
 
     with tabs[4]: # Market Development
         if f_mcw and f_mlw:
             mcw = load_csv_robust(f_mcw); mlw = load_csv_robust(f_mlw)
-            for d in [mcw, mlw]: d['NMV_C'] = d['NMV'].apply(clean_val); d['Conv_C'] = d['Conversion rate'].apply(lambda x: clean_val(x, is_pct=True))
+            for d in [mcw, mlw]: 
+                d['NMV_C'] = d['NMV'].apply(clean_val)
+                conv_col = next((c for c in d.columns if 'conversion' in c.lower()), 'Conversion rate')
+                d['Conv_C'] = d[conv_col].apply(lambda x: clean_val(x, is_pct=True))
             mcw['Share %'] = mcw['NMV_C'] / mcw['NMV_C'].sum()
             m_comp = mcw.merge(mlw[['Country', 'NMV_C']], on='Country', suffixes=('', '_LW'))
             m_comp['Growth'] = (m_comp['NMV_C'] / m_comp['NMV_C_LW']) - 1
