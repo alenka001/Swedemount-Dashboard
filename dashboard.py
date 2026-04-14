@@ -87,6 +87,7 @@ f_mkt = st.sidebar.file_uploader("5. Marknadsföring Full", type="csv")
 f_hybrid = st.sidebar.file_uploader("6. Z-Hybrid", type="csv")
 f_mcw = st.sidebar.file_uploader("7. Marknad CW (Land)", type="csv")
 f_mlw = st.sidebar.file_uploader("8. Marknad LW (Land)", type="csv")
+f_mlw = st.sidebar.file_uploader("8. Market LY (Land)", type="csv")
 
 # --- HUVUDLOGIK ---
 if all([f_cw, f_lw, f_ly, f_inv]):
@@ -113,10 +114,10 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         df['Sold'] = df[sold_col].apply(clean_val)
         sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
         if not sku_col: sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
-        df['join_key'] = df[sku_col]
-        df['Zalando article variant'] = df[sku_col]
+        df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
+        df['Zalando article variant'] = df['join_key']
         if 'Article variant' not in df.columns:
-            df['Article variant'] = df[next((c for c in df.columns if c.lower() == 'article variant'), sku_col)]
+        df['Article variant'] = df[next((c for c in df.columns if c.lower() == 'article variant'), sku_col)]
         return df
 
     df_cw, df_lw, df_ly = process_sales(df_cw_raw), process_sales(df_lw_raw), process_sales(df_ly_raw)
@@ -154,38 +155,77 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     camp_tab_analysis = None
     p1_active_marketing = None
 
-    with tabs[0]: # HÄLSA (ÅTERSTÄLLD)
-        st.subheader("Business Health Tracker (YoY Growth)")
+    with tabs[0]: # HÄLSA (GROWTH)
+        st.subheader("Business Health Tracker: WoW & YoY Growth")
+        total_nmv_cw = df_cw['NMV_EUR'].sum() # För att räkna ut andelen av totalen
         c1, c2 = st.columns(2)
         for col, grp in zip([c1, c2], ['Brand', 'Article type']):
             cw_g = df_cw.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'CW_EUR'})
+            lw_g = df_lw.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'LW_EUR'})
             ly_g = df_ly.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'LY_EUR'})
-            h_m = cw_g.merge(ly_g, on=grp, how='left').fillna(0)
-            h_m['Growth %'] = (h_m['CW_EUR'] - h_m['LY_EUR']) / h_m['LY_EUR'].replace(0, 1)
-            h_m['Status'] = h_m['Growth %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
-            col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({"CW_EUR": "€{:,.0f}", "LY_EUR": "€{:,.0f}", "Growth %": "{:.1%}"}), hide_index=True, use_container_width=True)
+            
+            h_m = cw_g.merge(lw_g, on=grp, how='left').merge(ly_g, on=grp, how='left').fillna(0)
+            
+            # Beräkningar
+            h_m['Andel %'] = h_m['CW_EUR'] / total_nmv_cw if total_nmv_cw > 0 else 0
+            h_m['WoW %'] = (h_m['CW_EUR'] - h_m['LW_EUR']) / h_m['LW_EUR'].replace(0, 1)
+            h_m['YoY %'] = (h_m['CW_EUR'] - h_m['LY_EUR']) / h_m['LY_EUR'].replace(0, 1)
+            h_m['Status'] = h_m['YoY %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
+            
+            col.write(f"**Summering per {grp}**")
+            col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({
+                "CW_EUR": "€{:,.0f}", "Andel %": "{:.1%}", "WoW %": "{:+.1%}", "YoY %": "{:+.1%}"
+            }), hide_index=True, use_container_width=True) hide_index=True, use_container_width=True)
 
-    with tabs[1]: # TOP 50 (ÅTERSTÄLLD MED RÖD MARKERING)
+    with tabs[1]: # 🏆 Top 50 Revenue
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
+        
+        # 1. Gruppera nuvarande vecka (CW)
         cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
-        lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index().rename(columns={'join_key': 'Zalando article variant'})
-        lw_top['Rank_LW'] = lw_top['NMV_EUR'].rank(ascending=False, method='min')
-        t50 = cw_top.merge(lw_top[['Zalando article variant', 'Rank_LW']], left_on='join_key', right_on='Zalando article variant', how='left')
-        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
-        t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
-        t50_f = t50.sort_values('Rank_CW').head(50)
-        disp = t50_f.rename(columns={'join_key': 'SKU', inv_name_col: 'Article Name', 'NMV_EUR': 'NMV €', zfs_col: 'Stock ZFS', pf_col: 'Stock PF'})
         
+        # 2. Gruppera förra veckan (LW) - VIKTIGT: Använd 'join_key' här också
+        lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index()
+        lw_top['Rank_LW'] = lw_top['NMV_EUR'].rank(ascending=False, method='min')
+        
+        # 3. Slå ihop CW och LW för att jämföra ranking (WoW)
+        # VIKTIGT: Vi matchar 'join_key' mot 'join_key'
+        t50 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').fillna(0)
+        
+        # 4. Lägg till lagerinformation från din Inventory Map
+        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
+        
+        # 5. Status-logik för pilar
+        t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
+        
+        t50_f = t50.sort_values('Rank_CW').head(50)
+        
+        # Byt namn på kolumner för snygg display
+        disp = t50_f.rename(columns={
+            'join_key': 'SKU', 
+            inv_name_col: 'Article Name', 
+            'NMV_EUR': 'NMV €', 
+            zfs_col: 'Stock ZFS', 
+            pf_col: 'Stock PF'
+        })
+        
+        # Funktion för röd markering vid lågt lager
         def highlight_stock_alert(row):
             styles = [''] * len(row)
             sold_val = row['Sold']
-            if 0 < row['Stock ZFS'] < sold_val: styles[row.index.get_loc('Stock ZFS')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
-            if 0 < row['Stock PF'] < sold_val: styles[row.index.get_loc('Stock PF')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
+            # Röd bakgrund om lagret är positivt men lägre än veckans försäljning
+            if 0 < row['Stock ZFS'] < sold_val: 
+                styles[row.index.get_loc('Stock ZFS')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
+            if 0 < row['Stock PF'] < sold_val: 
+                styles[row.index.get_loc('Stock PF')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
             return styles
 
+        # Visa tabellen med formatering och tusentalsavgränsare
         st.dataframe(disp[['Status', 'SKU', 'Article Name', 'NMV €', 'Sold', 'Stock ZFS', 'Stock PF']].style.format({
-            'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'
+            'NMV €': '€{:,.0f}', 
+            'Sold': '{:,.0f}', 
+            'Stock ZFS': '{:,.0f}', 
+            'Stock PF': '{:,.0f}'
         }).apply(highlight_stock_alert, axis=1), hide_index=True, use_container_width=True)
 
     with tabs[2]: # WISHLIST TOP 50 (ÅTERSTÄLLD)
@@ -258,19 +298,26 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.1f}x', 'Delta ROAS': '{:+.1f}x'
             }).apply(style_trends, axis=1), hide_index=True, use_container_width=True)
 
-    with tabs[4]: # MARKNADSUTVECKLING (ÅTERSTÄLLD MED SHARE % & WOW)
+    with tabs[4]: # MARKNADSUTVECKLING
         if f_mcw and f_mlw:
-            st.subheader("🌍 Marknadsutveckling per Land")
-            mcw, mlw = load_csv_robust(f_mcw), load_csv_robust(f_mlw)
+            st.subheader("🌍 Marknadsutveckling: WoW Performance & Share")
+            mcw = load_csv_robust(f_mcw)
+            mlw = load_csv_robust(f_mlw)
+            
             for d in [mcw, mlw]: d['NMV_C'] = d['NMV'].apply(clean_val)
-            mcw['Share %'] = mcw['NMV_C'] / mcw['NMV_C'].sum()
-            m_comp = mcw.merge(mlw[['Country', 'NMV_C']], on='Country', suffixes=('', '_LW'))
-            m_comp['Growth'] = (m_comp['NMV_C'] / m_comp['NMV_C_LW'].replace(0, 1)) - 1
-            m_comp_analysis = m_comp
-            st.dataframe(m_comp[['Country', 'NMV_C', 'Share %', 'Growth']].style.format({
-                'NMV_C': '€{:,.0f}', 'Share %': '{:.1%}', 'Growth': '{:+.1%}'
+            
+            total_m_nmv = mcw['NMV_C'].sum()
+            mcw['Share %'] = mcw['NMV_C'] / total_m_nmv if total_m_nmv > 0 else 0
+            
+            # Merge för WoW jämförelse
+            m_comp = mcw.merge(mlw[['Country', 'NMV_C']], on='Country', suffixes=('', '_LW'), how='left').fillna(0)
+            m_comp['WoW Growth %'] = (m_comp['NMV_C'] - m_comp['NMV_C_LW']) / m_comp['NMV_C_LW'].replace(0, 1)
+            
+            st.dataframe(m_comp[['Country', 'NMV_C', 'Share %', 'WoW Growth %']].sort_values('NMV_C', ascending=False).style.format({
+                'NMV_C': '€{:,.0f}', 'Share %': '{:.1%}', 'WoW Growth %': '{:+.1%}'
             }), hide_index=True, use_container_width=True)
-
+        else:
+            st.info("Ladda upp Market CW och Market LW för att se utveckling.")
     with tabs[5]: # Z-HYBRID (ÅTERSTÄLLD)
         if f_hybrid:
             st.subheader("🔄 Z-Hybrid Försäljningsandel")
