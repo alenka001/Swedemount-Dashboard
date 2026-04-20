@@ -176,8 +176,8 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({
                 "CW_EUR": "€{:,.0f}", "Andel %": "{:.1%}", "WoW %": "{:+.1%}", "YoY %": "{:+.1%}"
             }), hide_index=True, use_container_width=True) hide_index=True, use_container_width=True)
-
-    with tabs[1]: # 🏆 Top 50 Revenue
+            
+        with tabs[1]: # 🏆 Top 50 Revenue
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
         
         # 1. Gruppera nuvarande vecka (CW)
