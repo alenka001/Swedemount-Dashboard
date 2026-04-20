@@ -9,12 +9,19 @@ warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 # --- SET PAGE CONFIG ---
 st.set_page_config(page_title="Weekly Strategic Dashboard", layout="wide", page_icon="📊")
 
-# --- CSS FÖR PROFESSIONELL DESIGN ---
+# --- CSS FÖR PROFESSIONELL DESIGN (UPPDATERAD FÖR ATT VISA TOPPEN) ---
 st.markdown("""
     <style>
-    .block-container { padding-top: 1rem; padding-bottom: 0rem; }
+    /* Öka top-padding för att undvika att header täcker innehållet */
+    .block-container { 
+        padding-top: 4rem !important; 
+        padding-bottom: 0rem; 
+    }
+    
+    /* Justering för att métriker ska synas tydligt */
     [data-testid="stMetricValue"] { font-size: 22px !important; font-weight: 700; }
     [data-testid="stMetricDelta"] { font-size: 13px !important; }
+    
     [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { 
         padding: 2px 8px !important; 
         font-size: 13px !important; 
