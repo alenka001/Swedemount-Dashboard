@@ -364,5 +364,5 @@ with tabs[7]: # REA Manager
             )
         else:
             st.write("Inga produkter matchar kriterierna för REA-justering just nu.")
-else:
+    else:
     st.info("Vänligen ladda upp data för att starta.")
