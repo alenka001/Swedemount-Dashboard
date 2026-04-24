@@ -474,18 +474,36 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                              'Total Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
 
-        # --- DOWNLOAD TOOL ---
-        st.markdown("---")
-        # Slå ihop båda listorna till en fil för inköpare/e-com manager
-        action_plan = pd.concat([high_perf, low_perf])
+       st.markdown("---")
         
-        if not action_plan.empty:
-            csv = action_plan.to_csv(index=False).encode('utf-8-sig')
+        # Slå ihop listorna
+        full_action_plan = pd.concat([high_perf, low_perf])
+        
+        if not full_action_plan.empty:
+            # Vi väljer ut exakt de kolumner som är intressanta för exporten
+            export_df = full_action_plan[[
+                'Zalando article variant', 
+                'article_name', 
+                'Total Stock', 
+                'Sold', 
+                'Velocity', 
+                'DiscountRate', 
+                'Strategi', 
+                'Rekommenderad Åtgärd'
+            ]].copy()
+            
+            # Formatera DiscountRate till %-text för Excel
+            export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
+            
+            csv = export_df.to_csv(index=False).encode('utf-8-sig')
+            
             st.download_button(
-                label="📥 Ladda ner Action Plan (CSV för Excel)",
+                label="📥 Ladda ner Strategisk Action Plan",
                 data=csv,
-                file_name='REA_Action_Plan.csv',
-                mime='text/csv',
+                file_name='Zalando_REA_Action_Plan.csv',
+                mime='text/csv'
             )
+        else:
+            st.write("Inga produkter matchar kriterierna för åtgärder just nu.")
 else:
     st.info("Vänligen ladda upp data för att starta.")
