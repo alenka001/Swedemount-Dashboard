@@ -96,7 +96,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     df_ly_raw = load_csv_robust(f_ly)
     df_inv_raw = load_csv_robust(f_inv)
 
-    # 2. Tvätta kolumnnamnen i lagerfilen (Viktigt för att hitta priserna)
+    # 2. Tvätta kolumnnamnen i lagerfilen
     df_inv_raw.columns = [c.strip().lower().replace(' ', '_') for c in df_inv_raw.columns]
 
     # 3. Definiera och tvätta lager-kolumner
@@ -104,42 +104,49 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     zfs_col, pf_col = 'sellable_zfs_stock', 'sellable_pf_stock'
     reg_price_col, disc_price_col = 'regular_price', 'discounted_price'
     
+    # VIKTIGT: Vi kör clean_val FÖRST så att vi har faktiska siffror att räkna med
     df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].astype(str).str.strip().str.upper()
     df_inv_raw[zfs_col] = df_inv_raw[zfs_col].apply(clean_val)
     df_inv_raw[pf_col] = df_inv_raw[pf_col].apply(clean_val)
     df_inv_raw[reg_price_col] = df_inv_raw[reg_price_col].apply(clean_val)
     df_inv_raw[disc_price_col] = df_inv_raw[disc_price_col].apply(clean_val)
 
-    # 4. Beräkna Rabattnivå baserat på priser i lagerfilen
-    # Vi räknar ut skillnaden mellan ordinarie och nedsatt pris
-    df_inv_raw['DiscountRate'] = (df_inv_raw[reg_price_col] - df_inv_raw[disc_price_col]) / df_inv_raw[reg_price_col].replace(0, 1)
+    # 4. Beräkna Rabattnivå (Logik för att undvika 100% fel)
+    # Om discounted_price är 0 eller saknas, utgår vi från att det är fullpris (regular_price)
+    temp_disc_price = df_inv_raw[disc_price_col].where(df_inv_raw[disc_price_col] > 0, df_inv_raw[reg_price_col])
     
-    # 5. Skapa inv_map (Nu med den statiska rabatten)
+    # Beräkna faktiskt % rabatt
+    df_inv_raw['DiscountRate'] = (df_inv_raw[reg_price_col] - temp_disc_price) / df_inv_raw[reg_price_col].replace(0, 1)
+    df_inv_raw['DiscountRate'] = df_inv_raw['DiscountRate'].clip(0, 1) # Säkerställ 0-100%
+    
+    # 5. Skapa inv_map (Aggregera och filtrera lager)
     inv_map = df_inv_raw.groupby(inv_sku_col).agg({
         inv_name_col: 'first', 
         zfs_col: 'sum', 
         pf_col: 'sum',
-        'DiscountRate': 'max' # Vi sparar den aktuella rabatten per SKU
+        'DiscountRate': 'max' # Vi tar högsta aktuella rabatten per SKU
     }).reset_index()
+    
     inv_map['Total Stock'] = inv_map[zfs_col] + inv_map[pf_col]
     
-    # 6. Funktion för försäljningsfiler (Behöver inte längre räkna rabatt)
+    # --- FILTRERING ---
+    # Vi tar bara med produkter som faktiskt finns i lager (uteslut 0 stock)
+    inv_map = inv_map[inv_map['Total Stock'] > 0]
+    
+    # 6. Funktion för försäljningsfiler
     def process_sales(df):
         df.columns = [c.strip() for c in df.columns]
         nmv_col = next((c for c in df.columns if c.lower() == 'nmv'), 'NMV')
         df['NMV_EUR'] = df[nmv_col].apply(clean_val)
-        
         sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
         df['Sold'] = df[sold_col].apply(clean_val)
-        
         sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
         if not sku_col: 
             sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
-            
         df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
         return df
 
-    # 7. Kör processing och beräkna summor
+    # 7. Kör processing
     df_cw = process_sales(df_cw_raw)
     df_lw = process_sales(df_lw_raw)
     df_ly = process_sales(df_ly_raw)
@@ -147,7 +154,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     nmv_cw_sek = df_cw['NMV_EUR'].sum() * ex_rate
     nmv_lw_sek = df_lw['NMV_EUR'].sum() * ex_rate
     nmv_ly_sek = df_ly['NMV_EUR'].sum() * ex_rate
-    total_nmv_cw = df_cw['NMV_EUR'].sum()
+    
     st.title("🚀 Weekly Strategic Marketplace Board")
     
     # Rader och Tabs logik...
@@ -374,46 +381,37 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     with tabs[7]: # 🔥 REA Manager
         st.subheader("🔥 REA Manager: Strategic Action Plan")
         
-        # 1. Förbered data (Merge försäljning med lager)
-        # Vi använder inner join för att bara se produkter vi faktiskt har i lager och säljer
+        # Merge försäljning med det filtrerade lagret
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
         
-        # Beräkna säljhastighet (Velocity)
-        # Vi lägger till 0.1 i nämnaren för att undvika "division by zero"
-        rea_df['Velocity'] = rea_df['Sold'] / (rea_df['Total Stock'] + 0.1)
+        # Beräkna säljhastighet (Nu blir Velocity rimlig eftersom Stock > 0)
+        rea_df['Velocity'] = rea_df['Sold'] / rea_df['Total Stock']
         
-        # --- LOGIK FÖR ANALYS ---
-        
-        # A. Minska rabatt (Hög hastighet + Hög rabatt)
-        # Produkter som säljer slut för snabbt trots hög rabatt -> Här kan vi tjäna mer marginal
+        # Dela upp i strategier
         high_perf = rea_df[(rea_df['DiscountRate'] > 0.15) & (rea_df['Velocity'] > 0.1)].sort_values('Velocity', ascending=False).head(15).copy()
-        high_perf['Action'] = "Sänk rabatt till 5-10%"
+        low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05)].sort_values('Velocity', ascending=True).head(15).copy()
         
-        # B. Öka rabatt (Låg hastighet + Låg rabatt)
-        # Produkter som ligger stilla i lager -> Behöver en rea-kick för att rensa lagret
-        low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05) & (rea_df['Total Stock'] > 5)].sort_values('Velocity', ascending=True).head(15).copy()
-        low_perf['Action'] = "Höj rabatt till 20-30%"
-        
-        # --- VISUALISERING I TVÅ KOLUMNER ---
         col1, col2 = st.columns(2)
-        
         with col1:
             st.warning("📉 Minska Rabatt (Tjänar för lite marginal)")
-            if not high_perf.empty:
-                st.dataframe(high_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
-                             .style.format({'DiscountRate': '{:.1%}', 'Velocity': '{:.2f}'}), 
-                             use_container_width=True, hide_index=True)
-            else:
-                st.write("Inga produkter säljer för snabbt med hög rabatt just nu.")
+            # Snyggare formatering utan decimaler på Sold/Stock
+            st.dataframe(high_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
+                         .style.format({
+                             'DiscountRate': '{:.1%}', 
+                             'Velocity': '{:.2f}', 
+                             'Sold': '{:,.0f}', 
+                             'Total Stock': '{:,.0f}'
+                         }), use_container_width=True, hide_index=True)
 
         with col2:
             st.info("📈 Öka Rabatt (Säljer för långsamt)")
-            if not low_perf.empty:
-                st.dataframe(low_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
-                             .style.format({'DiscountRate': '{:.1%}', 'Velocity': '{:.2f}'}), 
-                             use_container_width=True, hide_index=True)
-            else:
-                st.write("Inga tröga produkter med låg rabatt hittades.")
+            st.dataframe(low_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
+                         .style.format({
+                             'DiscountRate': '{:.1%}', 
+                             'Velocity': '{:.2f}', 
+                             'Sold': '{:,.0f}', 
+                             'Total Stock': '{:,.0f}'
+                         }), use_container_width=True, hide_index=True)
 
         # --- DOWNLOAD TOOL ---
         st.markdown("---")
