@@ -86,6 +86,10 @@ f_mly = st.sidebar.file_uploader("9. Market LY (Country)", type="csv")
 
 # --- HUVUDLOGIK ---
 if all([f_cw, f_lw, f_ly, f_inv]):
+    m_comp_global = None
+    camp_tab_global = None
+    p1_active_mkt = None
+    
     df_cw_raw = load_csv_robust(f_cw)
     df_lw_raw = load_csv_robust(f_lw)
     df_ly_raw = load_csv_robust(f_ly)
@@ -101,7 +105,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         inv_name_col: 'first', 
         zfs_col: 'sum', 
         pf_col: 'sum'
-        }).reset_index()
+    }).reset_index()
     inv_map['Total Stock'] = inv_map[zfs_col] + inv_map[pf_col]
     
     def process_sales(df):
