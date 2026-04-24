@@ -93,14 +93,19 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     inv_sku_col, inv_name_col = 'zalando_article_variant', 'article_name'
     zfs_col, pf_col = 'sellable_zfs_stock', 'sellable_pf_stock'
-    df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].str.strip().str.upper()
+    df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].astype(str).str.strip().str.upper()
     df_inv_raw[zfs_col] = df_inv_raw[zfs_col].apply(clean_val)
     df_inv_raw[pf_col] = df_inv_raw[pf_col].apply(clean_val)
-    inv_map = df_inv_raw.groupby(inv_sku_col).agg({inv_name_col: 'first', zfs_col: 'sum', pf_col: 'sum'}).reset_index()
+    
+    inv_map = df_inv_raw.groupby(inv_sku_col).agg({
+        inv_name_col: 'first', 
+        zfs_col: 'sum', 
+        pf_col: 'sum'
+        }).reset_index()
     inv_map['Total Stock'] = inv_map[zfs_col] + inv_map[pf_col]
     
     def process_sales(df):
-        df.columns = [c.strip() for c in df.columns]
+        df_inv_raw.columns = [c.strip().lower().replace(' ', '_') for c in df_inv_raw.columns]
         nmv_col = next((c for c in df.columns if c.lower() == 'nmv'), 'NMV')
         df['NMV_EUR'] = df[nmv_col].apply(clean_val)
         sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
@@ -109,6 +114,8 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         if not sku_col: sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
         df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
         df['Zalando article variant'] = df['join_key']
+        inv_sku_col, inv_name_col = 'zalando_article_variant', 'article_name'
+        zfs_col, pf_col = 'sellable_zfs_stock', 'sellable_pf_stock'
         return df
 
     df_cw, df_lw, df_ly = process_sales(df_cw_raw), process_sales(df_lw_raw), process_sales(df_ly_raw)
@@ -340,7 +347,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
             for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
-with tabs[7]: # REA Manager
+    with tabs[7]: # REA Manager
         st.subheader("🔥 REA Action Plan")
         
         # Merge försäljning med lager
@@ -364,5 +371,5 @@ with tabs[7]: # REA Manager
             )
         else:
             st.write("Inga produkter matchar kriterierna för REA-justering just nu.")
-    else:
+else:
     st.info("Vänligen ladda upp data för att starta.")
