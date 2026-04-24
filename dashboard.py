@@ -250,7 +250,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 use_container_width=True
             )
 
-    with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
+ with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
         cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
@@ -276,7 +276,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'
         }).apply(highlight_stock_alert, axis=1), hide_index=True, use_container_width=True)
 
-    with tabs[2]: # WISHLIST
+ with tabs[2]: # WISHLIST
         if f_mkt:
             st.subheader("❤️ Top 50 Most Added to Wishlist")
             m_wish = load_csv_robust(f_mkt)
@@ -289,7 +289,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on=inv_sku_col, how='left').sort_values('Wish_Numeric', ascending=False).head(50)
             st.dataframe(w_merged[['ConfigSKU', inv_name_col, 'Wish_Numeric', 'Total Stock', zfs_col, pf_col]].style.format(precision=0), hide_index=True, use_container_width=True)
 
-    with tabs[3]: # MARKNADSFÖRING (KPI SAMMANFATTNING & TREND)
+ with tabs[3]: # MARKNADSFÖRING (KPI SAMMANFATTNING & TREND)
         if f_mkt:
             st.subheader("📣 Marketing Performance Overview")
             mkt_df = load_csv_robust(f_mkt)
@@ -345,7 +345,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.1f}x', 'Delta ROAS': '{:+.1f}x'
             }).apply(style_trends, axis=1), hide_index=True, use_container_width=True)
 
-    with tabs[4]: # MARKNADSUTVECKLING
+ with tabs[4]: # MARKNADSUTVECKLING
         if f_mcw and f_mlw:
             st.subheader("🌍 Marknadsutveckling per Land (WoW)")
             
@@ -379,7 +379,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         else:
             st.info("Ladda upp Market CW och Market LW för att se utveckling.")
 
-    with tabs[5]: # Z-HYBRID
+ with tabs[5]: # Z-HYBRID
         if f_hybrid:
             st.subheader("🔄 Z-Hybrid Försäljning")
             hy = load_csv_robust(f_hybrid)
@@ -393,7 +393,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 st.metric("Total Hybrid", f"{total_hy:,.0f} kr", f"{share:.1%} av total sales")
                 st.dataframe(hy_c.groupby([d_col, 'Veckodag'])['Sales_CW'].sum().reset_index().style.format({"Sales_CW": "{:,.0f} kr"}), hide_index=True, use_container_width=True)
 
-    with tabs[6]: # ANALYS (VINNARE OCH UTMANARE)
+ with tabs[6]: # ANALYS (VINNARE OCH UTMANARE)
         st.subheader("📝 Weekly Strategic Focus")
         v1, v2, v3 = st.columns(3)
         with v1: # Bästa Marknad
@@ -439,7 +439,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
             for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
-    with tabs[7]: # 🔥 REA Manager
+ with tabs[7]: # 🔥 REA Manager
         st.subheader("🔥 REA Manager: Strategic Action Plan")
         
         # Merge försäljning med det filtrerade lagret
@@ -464,7 +464,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                              'Total Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
 
-        with col2:
+     with col2:
             st.info("📈 Öka Rabatt (Säljer för långsamt)")
             st.dataframe(low_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
                          .style.format({
