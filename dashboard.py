@@ -357,29 +357,62 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
             for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
-    with tabs[7]: # REA Manager
-        st.subheader("🔥 REA Action Plan")
+    with tabs[7]: # 🔥 REA Manager
+        st.subheader("🔥 REA Manager: Strategic Action Plan")
         
-        # Merge försäljning med lager
+        # 1. Förbered data (Merge försäljning med lager)
+        # Vi använder inner join för att bara se produkter vi faktiskt har i lager och säljer
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
+        
+        # Beräkna säljhastighet (Velocity)
+        # Vi lägger till 0.1 i nämnaren för att undvika "division by zero"
         rea_df['Velocity'] = rea_df['Sold'] / (rea_df['Total Stock'] + 0.1)
         
-        # Logik: Produkter med låg rabatt (<10%) och låg säljhastighet
-        low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05)].copy()
+        # --- LOGIK FÖR ANALYS ---
         
-        if not low_perf.empty:
-            low_perf['Action'] = "Öka rabatt till 20%"
-            st.dataframe(low_perf[['join_key', 'DiscountRate', 'Velocity', 'Action']], use_container_width=True)
-            
-            # Nedladdning
-            csv = low_perf.to_csv(index=False).encode('utf-8-sig')
+        # A. Minska rabatt (Hög hastighet + Hög rabatt)
+        # Produkter som säljer slut för snabbt trots hög rabatt -> Här kan vi tjäna mer marginal
+        high_perf = rea_df[(rea_df['DiscountRate'] > 0.15) & (rea_df['Velocity'] > 0.1)].sort_values('Velocity', ascending=False).head(15).copy()
+        high_perf['Action'] = "Sänk rabatt till 5-10%"
+        
+        # B. Öka rabatt (Låg hastighet + Låg rabatt)
+        # Produkter som ligger stilla i lager -> Behöver en rea-kick för att rensa lagret
+        low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05) & (rea_df['Total Stock'] > 5)].sort_values('Velocity', ascending=True).head(15).copy()
+        low_perf['Action'] = "Höj rabatt till 20-30%"
+        
+        # --- VISUALISERING I TVÅ KOLUMNER ---
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.warning("📉 Minska Rabatt (Tjänar för lite marginal)")
+            if not high_perf.empty:
+                st.dataframe(high_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
+                             .style.format({'DiscountRate': '{:.1%}', 'Velocity': '{:.2f}'}), 
+                             use_container_width=True, hide_index=True)
+            else:
+                st.write("Inga produkter säljer för snabbt med hög rabatt just nu.")
+
+        with col2:
+            st.info("📈 Öka Rabatt (Säljer för långsamt)")
+            if not low_perf.empty:
+                st.dataframe(low_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
+                             .style.format({'DiscountRate': '{:.1%}', 'Velocity': '{:.2f}'}), 
+                             use_container_width=True, hide_index=True)
+            else:
+                st.write("Inga tröga produkter med låg rabatt hittades.")
+
+        # --- DOWNLOAD TOOL ---
+        st.markdown("---")
+        # Slå ihop båda listorna till en fil för inköpare/e-com manager
+        action_plan = pd.concat([high_perf, low_perf])
+        
+        if not action_plan.empty:
+            csv = action_plan.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
-                label="📥 Ladda ner REA Plan",
+                label="📥 Ladda ner Action Plan (CSV för Excel)",
                 data=csv,
                 file_name='REA_Action_Plan.csv',
-                mime='text/csv'
+                mime='text/csv',
             )
-        else:
-            st.write("Inga produkter matchar kriterierna för REA-justering just nu.")
 else:
     st.info("Vänligen ladda upp data för att starta.")
