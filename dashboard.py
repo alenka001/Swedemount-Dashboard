@@ -135,19 +135,184 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             h_m['Status'] = h_m['YoY %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
             col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({"CW_EUR": "€{:,.0f}", "Andel %": "{:.1%}", "WoW %": "{:+.1%}", "YoY %": "{:+.1%}"}), hide_index=True, use_container_width=True)
 
-    with tabs[1]: # TOP 50
+    with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
+        st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
         cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
+        
         lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index()
         lw_top['Rank_LW'] = lw_top['NMV_EUR'].rank(ascending=False, method='min')
-        t50 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
+        
+        t50 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').fillna(0)
+        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
+        
         t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
-        disp = t50.sort_values('Rank_CW').head(50).rename(columns={'join_key': 'SKU', inv_name_col: 'Article Name', 'NMV_EUR': 'NMV €', zfs_col: 'Stock ZFS', pf_col: 'Stock PF'})
-        st.dataframe(disp[['Status', 'SKU', 'Article Name', 'NMV €', 'Sold', 'Stock ZFS', 'Stock PF']].style.format({'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'}), hide_index=True, use_container_width=True)
+        t50_f = t50.sort_values('Rank_CW').head(50)
+        disp = t50_f.rename(columns={'join_key': 'SKU', inv_name_col: 'Article Name', 'NMV_EUR': 'NMV €', zfs_col: 'Stock ZFS', pf_col: 'Stock PF'})
+        
+        def highlight_stock_alert(row):
+            styles = [''] * len(row)
+            sold_val = row['Sold']
+            if 0 < row['Stock ZFS'] < sold_val: styles[row.index.get_loc('Stock ZFS')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
+            if 0 < row['Stock PF'] < sold_val: styles[row.index.get_loc('Stock PF')] = 'background-color: #ffcccc; color: #990000; font-weight: bold;'
+            return styles
 
-    with tabs[6]: # ANALYS - Här lägger du in din analyslogik
+        st.dataframe(disp[['Status', 'SKU', 'Article Name', 'NMV €', 'Sold', 'Stock ZFS', 'Stock PF']].style.format({
+            'NMV €': '€{:,.0f}', 'Sold': '{:,.0f}', 'Stock ZFS': '{:,.0f}', 'Stock PF': '{:,.0f}'
+        }).apply(highlight_stock_alert, axis=1), hide_index=True, use_container_width=True)
+
+    with tabs[2]: # WISHLIST
+        if f_mkt:
+            st.subheader("❤️ Top 50 Most Added to Wishlist")
+            m_wish = load_csv_robust(f_mkt)
+            m_wish.columns = [c.replace(' ', '') for c in m_wish.columns]
+            m_wish['W_Clean'] = m_wish['Week'].apply(clean_val)
+            m_wish['Wish_Numeric'] = m_wish['Addtowishlist'].apply(clean_val)
+            l_week = m_wish['W_Clean'].max()
+            w_data = m_wish[m_wish['W_Clean'] == l_week].groupby('ConfigSKU')[['Wish_Numeric']].sum().reset_index()
+            w_data['ConfigSKU'] = w_data['ConfigSKU'].str.strip().str.upper()
+            w_merged = w_data.merge(inv_map, left_on='ConfigSKU', right_on=inv_sku_col, how='left').sort_values('Wish_Numeric', ascending=False).head(50)
+            st.dataframe(w_merged[['ConfigSKU', inv_name_col, 'Wish_Numeric', 'Total Stock', zfs_col, pf_col]].style.format(precision=0), hide_index=True, use_container_width=True)
+
+    with tabs[3]: # MARKNADSFÖRING (KPI SAMMANFATTNING & TREND)
+        if f_mkt:
+            st.subheader("📣 Marketing Performance Overview")
+            mkt_df = load_csv_robust(f_mkt)
+            mkt_df.columns = [c.replace(' ', '') for c in mkt_df.columns]
+            m_cols = ['Budgetspent', 'GMV', 'Addtowishlist', 'Clicks', 'Itemssold', 'Viewableadimpressions', 'PDPviews']
+            for c in m_cols:
+                if c in mkt_df.columns: mkt_df[c] = pd.to_numeric(mkt_df[c].apply(clean_val), errors='coerce').fillna(0.0)
+            
+            mkt_df['W_Clean'] = mkt_df['Week'].apply(clean_val)
+            w_list = sorted(mkt_df['W_Clean'].unique(), reverse=True)
+            sel_w1 = st.selectbox("Aktiv Vecka", w_list, index=0, key='mkt_w1')
+            sel_w2 = st.selectbox("Jämförelse Vecka", w_list, index=min(1, len(w_list)-1), key='mkt_w2')
+            p1, p2 = mkt_df[mkt_df['W_Clean'] == sel_w1], mkt_df[mkt_df['W_Clean'] == sel_w2]
+            p1_active_mkt = p1
+
+            def get_m_stats(df_sub, nmv_sek_val):
+                s = df_sub[m_cols].sum()
+                nmv_eur = (nmv_sek_val/ex_rate) if nmv_sek_val > 0 else 0
+                return {
+                    'Spend': s['Budgetspent'], 'GMV': s['GMV'], 'Wish': s['Addtowishlist'], 
+                    'PDP': s['PDPviews'], 'Impressions': s['Viewableadimpressions'],
+                    'ROAS': s['GMV']/s['Budgetspent'] if s['Budgetspent'] > 0 else 0,
+                    'COS': s['Budgetspent']/s['GMV'] if s['GMV'] > 0 else 0,
+                    'Blended': s['Budgetspent']/nmv_eur if nmv_eur > 0 else 0
+                }
+
+            ms1, ms2 = get_m_stats(p1, nmv_cw_sek), get_m_stats(p2, nmv_lw_sek)
+            r1, r2, r3, r4, r5, r6 = st.columns(6)
+            r1.metric("Ad Spend", f"€{ms1['Spend']:,.0f}", delta=f"{(ms1['Spend']/ms2['Spend']-1):.0%}" if ms2['Spend']>0 else None, delta_color="inverse")
+            r2.metric("Total GMV", f"€{ms1['GMV']:,.0f}", delta=f"{(ms1['GMV']/ms2['GMV']-1):.0%}" if ms2['GMV']>0 else None)
+            r3.metric("Total ROAS", f"{ms1['ROAS']:,.1f}x", delta=f"{(ms1['ROAS']-ms2['ROAS']):.1f}x")
+            r4.metric("COS", f"{ms1['COS']:.1%}", delta=f"{(ms1['COS']-ms2['COS']):.1%}", delta_color="inverse")
+            r5.metric("Blended COS", f"{ms1['Blended']:.1%}", delta=f"{(ms1['Blended']-ms2['Blended']):.1%}", delta_color="inverse")
+            r6.metric("Impressions", f"{ms1['Impressions']:,.0f}", delta=f"{(ms1['Impressions']/ms2['Impressions']-1):.0%}" if ms2['Impressions']>0 else None)
+
+            st.markdown("---")
+            c_cw = p1.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
+            c_lw = p2.groupby('ZMSCampaign')[['Budgetspent', 'GMV']].sum()
+            camp_tab = c_cw.join(c_lw, rsuffix='_LW', how='left').fillna(0).reset_index()
+            camp_tab['ROAS CW'] = camp_tab['GMV'] / camp_tab['Budgetspent'].replace(0, 1)
+            camp_tab['ROAS LW'] = camp_tab['GMV_LW'] / camp_tab['Budgetspent_LW'].replace(0, 1)
+            camp_tab['Delta ROAS'] = camp_tab['ROAS CW'] - camp_tab['ROAS LW']
+            camp_tab_global = camp_tab
+
+            def style_trends(row):
+                styles = [''] * len(row)
+                idx = row.index.get_loc('Delta ROAS')
+                if row['Delta ROAS'] > 0: styles[idx] = 'color: #28a745; font-weight: bold'
+                elif row['Delta ROAS'] < 0: styles[idx] = 'color: #dc3545; font-weight: bold'
+                return styles
+
+            st.dataframe(camp_tab[['ZMSCampaign', 'Budgetspent', 'GMV', 'ROAS CW', 'Delta ROAS']].style.format({
+                'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.1f}x', 'Delta ROAS': '{:+.1f}x'
+            }).apply(style_trends, axis=1), hide_index=True, use_container_width=True)
+
+    with tabs[4]: # MARKNADSUTVECKLING (SHARE % & WoW GROWTH)
+        if f_mcw and f_mlw:
+            st.subheader("🌍 Marknadsutveckling per Land (WoW)")
+            mcw, mlw = load_csv_robust(f_mcw), load_csv_robust(f_mlw)
+            for d in [mcw, mlw]: d['NMV_C'] = d['NMV'].apply(clean_val)
+            total_m_nmv = mcw['NMV_C'].sum()
+            mcw['Share %'] = mcw['NMV_C'] / total_m_nmv if total_m_nmv > 0 else 0
+            m_comp = mcw.merge(mlw[['Country', 'NMV_C']], on='Country', suffixes=('', '_LW'), how='left').fillna(0)
+            m_comp['Growth'] = (m_comp['NMV_C'] / m_comp['NMV_C_LW'].replace(0, 1)) - 1
+            m_comp_global = m_comp
+            st.dataframe(m_comp[['Country', 'NMV_C', 'Share %', 'Growth']].sort_values('NMV_C', ascending=False).style.format({
+                'NMV_C': '€{:,.0f}', 'Share %': '{:.1%}', 'Growth': '{:+.1%}'
+            }), hide_index=True, use_container_width=True)
+
+    with tabs[5]: # Z-HYBRID
+        if f_hybrid:
+            st.subheader("🔄 Z-Hybrid Försäljning")
+            hy = load_csv_robust(f_hybrid)
+            hy.columns = [c.strip() for c in hy.columns]
+            v_col, d_col = 'Ordervärde ex.moms', 'Datum'
+            if v_col in hy.columns:
+                hy_c = hy[hy[d_col].str.lower() != 'total'].copy()
+                hy_c['Sales_CW'] = hy_c[v_col].apply(clean_val)
+                total_hy = hy_c['Sales_CW'].sum()
+                share = (total_hy / nmv_cw_sek) if nmv_cw_sek > 0 else 0
+                st.metric("Total Hybrid", f"{total_hy:,.0f} kr", f"{share:.1%} av total sales")
+                st.dataframe(hy_c.groupby([d_col, 'Veckodag'])['Sales_CW'].sum().reset_index().style.format({"Sales_CW": "{:,.0f} kr"}), hide_index=True, use_container_width=True)
+
+    with tabs[6]: # ANALYS (VINNARE OCH UTMANARE)
         st.subheader("📝 Weekly Strategic Focus")
-        # Analys-logik och vinnare/utmanare visas här
+        v1, v2, v3 = st.columns(3)
+        with v1: # Bästa Marknad
+            if m_comp_global is not None:
+                bm = m_comp_global.sort_values('Growth', ascending=False).iloc[0]
+                st.success(f"**Bästa Marknad (WoW)**\n\n🌍 {bm['Country']} (+{bm['Growth']:.1%})")
+        with v2: # Bästa Kampanj
+            if camp_tab_global is not None:
+                bc = camp_tab_global.sort_values('Delta ROAS', ascending=False).iloc[0]
+                st.success(f"**Bästa Kampanj (ROAS)**\n\n📣 {bc['ZMSCampaign']} (+{bc['Delta ROAS']:.1f}x)")
+        with v3: # Topp PDP
+            if p1_active_mkt is not None:
+                st.success("**Topp 5 PDP Artiklar**")
+                top_pdp = p1_active_mkt.groupby('ConfigSKU')['PDPviews'].sum().sort_values(ascending=False).head(5)
+                for sku, val in top_pdp.items():
+                    name = inv_map[inv_map[inv_sku_col] == sku][inv_name_col].values[0] if sku in inv_map[inv_sku_col].values else sku
+                    st.write(f"👁️ {val:,.0f} - {name}")
+
+        u1, u2, u3 = st.columns(3)
+        with u1: # Sämsta Marknad
+            if m_comp_global is not None:
+                wm = m_comp_global.sort_values('Growth', ascending=True).iloc[0]
+                st.error(f"**Utmanande Marknad**\n\n🌍 {wm['Country']} ({wm['Growth']:.1%})")
+        with u2: # Sämsta Kampanj
+            if camp_tab_global is not None:
+                wc = camp_tab_global.sort_values('Delta ROAS', ascending=True).iloc[0]
+                st.error(f"**Utmanande Kampanj**\n\n📣 {wc['ZMSCampaign']} ({wc['Delta ROAS']:.1f}x)")
+        with u3: # Sämsta PDP
+            if p1_active_mkt is not None:
+                st.error("**Utmanande 5 PDP Artiklar**")
+                low_pdp = p1_active_mkt[p1_active_mkt['PDPviews'] > 0].groupby('ConfigSKU')['PDPviews'].sum().sort_values(ascending=True).head(5)
+                for sku, val in low_pdp.items():
+                    name = inv_map[inv_map[inv_sku_col] == sku][inv_name_col].values[0] if sku in inv_map[inv_sku_col].values else sku
+                    st.write(f"📉 {val:,.0f} - {name}")
+
+        st.markdown("---")
+        c_a1, c_a2 = st.columns(2)
+        with c_a1:
+            st.info("**Topp Omsättning**")
+            for i, r in t50_f.head(3).iterrows(): st.write(f"💰 €{r['NMV_EUR']:,.0f} - {r[inv_name_col]}")
+        with c_a2:
+            st.error("**Lager-Attention**")
+            crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
+            for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
+
+with tabs[7]: # REA Manager
+        st.subheader("🔥 REA Action Plan")
+        rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
+        rea_df['Velocity'] = rea_df['Sold'] / (rea_df['Total Stock'] + 0.1)
+        low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05)].copy()
+        low_perf['Action'] = "Öka rabatt till 20%"
+        st.dataframe(low_perf[['join_key', 'DiscountRate', 'Velocity', 'Action']], use_container_width=True)
+        csv = low_perf.to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 Ladda ner REA Plan", csv, "REA_Action_Plan.csv", "text/csv")
         
 else:
     st.info("Vänligen ladda upp data för att starta.")
