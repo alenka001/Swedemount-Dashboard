@@ -118,7 +118,22 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # Beräkna faktiskt % rabatt
     df_inv_raw['DiscountRate'] = (df_inv_raw[reg_price_col] - temp_disc_price) / df_inv_raw[reg_price_col].replace(0, 1)
     df_inv_raw['DiscountRate'] = df_inv_raw['DiscountRate'].clip(0, 1) # Säkerställ 0-100%
+    # --- NYTT: IDENTIFIERA PRISKONFLIKTER (Görs innan groupby) ---
+    # Vi kollar i rådatan om en SKU har mer än ett unikt pris i 'discounted_price'
+    conflict_skus = df_inv_raw.groupby(inv_sku_col)[disc_price_col].nunique()
+    conflict_skus = conflict_skus[conflict_skus > 1].index.tolist()
     
+    if conflict_skus:
+        # Skapa en rapport som bara innehåller krockarna
+        conflict_report = df_inv_raw[df_inv_raw[inv_sku_col].isin(conflict_skus)].groupby(inv_sku_col).agg({
+            inv_name_col: 'first',
+            disc_price_col: lambda x: sorted(list(set(x))), # Listar de olika priserna, t.ex. [199, 223]
+            zfs_col: 'sum',
+            pf_col: 'sum'
+        }).reset_index()
+    else:
+        conflict_report = pd.DataFrame()
+        
     # 5. Skapa inv_map (Aggregera och filtrera lager)
     inv_map = df_inv_raw.groupby(inv_sku_col).agg({
         inv_name_col: 'first', 
@@ -480,6 +495,27 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                              'Sold': '{:,.0f}', 
                              'Total Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
+
+        # --- NY SEKTION: PRISKONFLIKTER ---
+        st.markdown("---")
+        st.subheader("⚠️ Priskonflikter (Dubbla priser på samma SKU)")
+        st.write("Dessa produkter har två eller fler olika REA-priser aktiva samtidigt.")
+
+        if not conflict_report.empty:
+            st.error(f"Hittade {len(conflict_report)} artiklar med priskonflikter!")
+            st.dataframe(conflict_report[['Zalando article variant', 'article_name', 'Pris-varianter', 'Antal Priser']], use_container_width=True)
+            
+            # Skapa fil för nedladdning
+            csv_conflict = conflict_report.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Ladda ner Rapport: Priskonflikter",
+                data=csv_conflict,
+                file_name='Zalando_Price_Conflicts.csv',
+                mime='text/csv',
+                key='conflict_btn'
+            )
+        else:
+            st.success("Inga priskonflikter hittades. Alla SKU:er har enhetlig prissättning!")
 
         st.markdown("---")
         
