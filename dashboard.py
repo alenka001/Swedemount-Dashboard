@@ -127,7 +127,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     st.title("🚀 Weekly Strategic Marketplace Board")
     
     # Rader och Tabs logik...
-    tabs = st.tabs(["📈 Hälsa", "🏆 Top 50 Revenue", "❤️ Wishlist", "📣 Marknadsföring", "🌍 Marknadsutveckling", "🔄 Z-Hybrid", "📝 Analys"])
+    tabs = st.tabs(["📈 Hälsa", "🏆 Top 50 Revenue", "❤️ Wishlist", "📣 Marknadsföring", "🌍 Marknad", "🔄 Hybrid", "📝 Analys", "🔥 REA Manager"])
 
     with tabs[0]: # HÄLSA
         st.subheader("Business Health Tracker: WoW & YoY Growth")
