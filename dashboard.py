@@ -464,7 +464,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                              'Total Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
 
-         with col2:
+        with col2:
             st.info("📈 Öka Rabatt (Säljer för långsamt)")
             st.dataframe(low_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
                          .style.format({
