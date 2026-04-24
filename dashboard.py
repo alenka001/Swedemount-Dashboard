@@ -474,7 +474,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                              'Total Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
 
-       st.markdown("---")
+     st.markdown("---")
         
         # Slå ihop listorna
         full_action_plan = pd.concat([high_perf, low_perf])
