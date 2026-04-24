@@ -82,6 +82,7 @@ f_mkt = st.sidebar.file_uploader("5. Marknadsföring Full", type="csv")
 f_hybrid = st.sidebar.file_uploader("6. Z-Hybrid", type="csv")
 f_mcw = st.sidebar.file_uploader("7. Market CW (Land)", type="csv")
 f_mlw = st.sidebar.file_uploader("8. Market LW (Land)", type="csv")
+f_mly = st.sidebar.file_uploader("9. Market LY (Country)", type="csv") 
 
 # --- HUVUDLOGIK ---
 if all([f_cw, f_lw, f_ly, f_inv]):
@@ -123,17 +124,32 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
     with tabs[0]: # HÄLSA
         st.subheader("Business Health Tracker: WoW & YoY Growth")
+        total_nmv_cw = df_cw['NMV_EUR'].sum()
         c1, c2 = st.columns(2)
+        
         for col, grp in zip([c1, c2], ['Brand', 'Article type']):
+            # Gruppera data
             cw_g = df_cw.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'CW_EUR'})
             lw_g = df_lw.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'LW_EUR'})
             ly_g = df_ly.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'LY_EUR'})
+            
+            # Slå ihop
             h_m = cw_g.merge(lw_g, on=grp, how='left').merge(ly_g, on=grp, how='left').fillna(0)
+            
+            # Beräkna nyckeltal
             h_m['Andel %'] = h_m['CW_EUR'] / total_nmv_cw if total_nmv_cw > 0 else 0
             h_m['WoW %'] = (h_m['CW_EUR'] - h_m['LW_EUR']) / h_m['LW_EUR'].replace(0, 1)
             h_m['YoY %'] = (h_m['CW_EUR'] - h_m['LY_EUR']) / h_m['LY_EUR'].replace(0, 1)
             h_m['Status'] = h_m['YoY %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
-            col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({"CW_EUR": "€{:,.0f}", "Andel %": "{:.1%}", "WoW %": "{:+.1%}", "YoY %": "{:+.1%}"}), hide_index=True, use_container_width=True)
+            
+            # Visa tabell
+            col.write(f"**Summering per {grp}**")
+            col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({
+                "CW_EUR": "€{:,.0f}", 
+                "Andel %": "{:.1%}", 
+                "WoW %": "{:+.1%}", 
+                "YoY %": "{:+.1%}"
+            }), hide_index=True, use_container_width=True)
 
     with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
@@ -230,19 +246,39 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 'Budgetspent': '€{:,.0f}', 'GMV': '€{:,.0f}', 'ROAS CW': '{:,.1f}x', 'Delta ROAS': '{:+.1f}x'
             }).apply(style_trends, axis=1), hide_index=True, use_container_width=True)
 
-    with tabs[4]: # MARKNADSUTVECKLING (SHARE % & WoW GROWTH)
+    with tabs[4]: # MARKNADSUTVECKLING
         if f_mcw and f_mlw:
             st.subheader("🌍 Marknadsutveckling per Land (WoW)")
-            mcw, mlw = load_csv_robust(f_mcw), load_csv_robust(f_mlw)
-            for d in [mcw, mlw]: d['NMV_C'] = d['NMV'].apply(clean_val)
+            
+            # Ladda in filerna
+            mcw = load_csv_robust(f_mcw)
+            mlw = load_csv_robust(f_mlw)
+            
+            # Tvätta NMV-värdena för båda filerna
+            mcw['NMV_C'] = mcw['NMV'].apply(clean_val)
+            mlw['NMV_C'] = mlw['NMV'].apply(clean_val)
+            
+            # Beräkna total för att få fram 'Share %'
             total_m_nmv = mcw['NMV_C'].sum()
             mcw['Share %'] = mcw['NMV_C'] / total_m_nmv if total_m_nmv > 0 else 0
+            
+            # Slå ihop CW och LW för att kunna jämföra tillväxten
             m_comp = mcw.merge(mlw[['Country', 'NMV_C']], on='Country', suffixes=('', '_LW'), how='left').fillna(0)
-            m_comp['Growth'] = (m_comp['NMV_C'] / m_comp['NMV_C_LW'].replace(0, 1)) - 1
+            
+            # Beräkna tillväxten mot föregående vecka
+            m_comp['Growth'] = (m_comp['NMV_C'] - m_comp['NMV_C_LW']) / m_comp['NMV_C_LW'].replace(0, 1)
+            
+            # Spara för analysfliken
             m_comp_global = m_comp
+            
+            # Visa tabellen med all tidigare formatering
             st.dataframe(m_comp[['Country', 'NMV_C', 'Share %', 'Growth']].sort_values('NMV_C', ascending=False).style.format({
-                'NMV_C': '€{:,.0f}', 'Share %': '{:.1%}', 'Growth': '{:+.1%}'
+                'NMV_C': '€{:,.0f}', 
+                'Share %': '{:.1%}', 
+                'Growth': '{:+.1%}'
             }), hide_index=True, use_container_width=True)
+        else:
+            st.info("Ladda upp Market CW och Market LW för att se utveckling.")
 
     with tabs[5]: # Z-HYBRID
         if f_hybrid:
@@ -306,12 +342,27 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
 with tabs[7]: # REA Manager
         st.subheader("🔥 REA Action Plan")
+        
+        # Merge försäljning med lager
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
         rea_df['Velocity'] = rea_df['Sold'] / (rea_df['Total Stock'] + 0.1)
+        
+        # Logik: Produkter med låg rabatt (<10%) och låg säljhastighet
         low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05)].copy()
-        low_perf['Action'] = "Öka rabatt till 20%"
-        st.dataframe(low_perf[['join_key', 'DiscountRate', 'Velocity', 'Action']], use_container_width=True)
-        csv = low_perf.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 Ladda ner REA Plan", csv, "REA_Action_Plan.csv", "text/csv")
+        
+        if not low_perf.empty:
+            low_perf['Action'] = "Öka rabatt till 20%"
+            st.dataframe(low_perf[['join_key', 'DiscountRate', 'Velocity', 'Action']], use_container_width=True)
+            
+            # Nedladdning
+            csv = low_perf.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Ladda ner REA Plan",
+                data=csv,
+                file_name='REA_Action_Plan.csv',
+                mime='text/csv'
+            )
+        else:
+            st.write("Inga produkter matchar kriterierna för REA-justering just nu.")
 else:
     st.info("Vänligen ladda upp data för att starta.")
