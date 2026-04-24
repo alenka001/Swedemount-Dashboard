@@ -196,7 +196,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # Rader och Tabs logik...
     tabs = st.tabs(["📈 Hälsa", "🏆 Top 50 Revenue", "❤️ Wishlist", "📣 Marknadsföring", "🌍 Marknad", "🔄 Hybrid", "📝 Analys", "🔥 REA Manager"])
 
-with tabs[0]: # 📈 HÄLSA
+ with tabs[0]: # 📈 HÄLSA
         st.subheader("Business Health Tracker: WoW & YoY Growth")
         
         # Säkerställ att vi har totalen för andelsberäkning
