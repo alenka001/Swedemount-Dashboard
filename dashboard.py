@@ -90,50 +90,64 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     camp_tab_global = None
     p1_active_mkt = None
     
+    # 1. Ladda rådata
     df_cw_raw = load_csv_robust(f_cw)
     df_lw_raw = load_csv_robust(f_lw)
     df_ly_raw = load_csv_robust(f_ly)
     df_inv_raw = load_csv_robust(f_inv)
 
+    # 2. Tvätta kolumnnamnen i lagerfilen (Viktigt för att hitta priserna)
+    df_inv_raw.columns = [c.strip().lower().replace(' ', '_') for c in df_inv_raw.columns]
+
+    # 3. Definiera och tvätta lager-kolumner
     inv_sku_col, inv_name_col = 'zalando_article_variant', 'article_name'
     zfs_col, pf_col = 'sellable_zfs_stock', 'sellable_pf_stock'
+    reg_price_col, disc_price_col = 'regular_price', 'discounted_price'
+    
     df_inv_raw[inv_sku_col] = df_inv_raw[inv_sku_col].astype(str).str.strip().str.upper()
     df_inv_raw[zfs_col] = df_inv_raw[zfs_col].apply(clean_val)
     df_inv_raw[pf_col] = df_inv_raw[pf_col].apply(clean_val)
+    df_inv_raw[reg_price_col] = df_inv_raw[reg_price_col].apply(clean_val)
+    df_inv_raw[disc_price_col] = df_inv_raw[disc_price_col].apply(clean_val)
+
+    # 4. Beräkna Rabattnivå baserat på priser i lagerfilen
+    # Vi räknar ut skillnaden mellan ordinarie och nedsatt pris
+    df_inv_raw['DiscountRate'] = (df_inv_raw[reg_price_col] - df_inv_raw[disc_price_col]) / df_inv_raw[reg_price_col].replace(0, 1)
     
+    # 5. Skapa inv_map (Nu med den statiska rabatten)
     inv_map = df_inv_raw.groupby(inv_sku_col).agg({
         inv_name_col: 'first', 
         zfs_col: 'sum', 
-        pf_col: 'sum'
+        pf_col: 'sum',
+        'DiscountRate': 'max' # Vi sparar den aktuella rabatten per SKU
     }).reset_index()
     inv_map['Total Stock'] = inv_map[zfs_col] + inv_map[pf_col]
     
+    # 6. Funktion för försäljningsfiler (Behöver inte längre räkna rabatt)
     def process_sales(df):
-        df_inv_raw.columns = [c.strip().lower().replace(' ', '_') for c in df_inv_raw.columns]
+        df.columns = [c.strip() for c in df.columns]
         nmv_col = next((c for c in df.columns if c.lower() == 'nmv'), 'NMV')
         df['NMV_EUR'] = df[nmv_col].apply(clean_val)
+        
         sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
         df['Sold'] = df[sold_col].apply(clean_val)
-        disc_col = next((c for c in df.columns if 'discount rate' in c.lower()), None)
-        if disc_col:
-            df['DiscountRate'] = df[disc_col].apply(lambda x: clean_val(x, is_pct=True))
-        else:
-            df['DiscountRate'] = 0.0
+        
         sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
         if not sku_col: 
             sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
+            
         df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
-        df['Zalando article variant'] = df['join_key']
-        inv_sku_col, inv_name_col = 'zalando_article_variant', 'article_name'
-        zfs_col, pf_col = 'sellable_zfs_stock', 'sellable_pf_stock'
         return df
 
-    df_cw, df_lw, df_ly = process_sales(df_cw_raw), process_sales(df_lw_raw), process_sales(df_ly_raw)
+    # 7. Kör processing och beräkna summor
+    df_cw = process_sales(df_cw_raw)
+    df_lw = process_sales(df_lw_raw)
+    df_ly = process_sales(df_ly_raw)
+    
     nmv_cw_sek = df_cw['NMV_EUR'].sum() * ex_rate
     nmv_lw_sek = df_lw['NMV_EUR'].sum() * ex_rate
     nmv_ly_sek = df_ly['NMV_EUR'].sum() * ex_rate
     total_nmv_cw = df_cw['NMV_EUR'].sum()
-
     st.title("🚀 Weekly Strategic Marketplace Board")
     
     # Rader och Tabs logik...
