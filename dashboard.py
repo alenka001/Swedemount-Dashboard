@@ -166,6 +166,16 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         df['NMV_EUR'] = df[nmv_col].apply(clean_val)
         sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
         df['Sold'] = df[sold_col].apply(clean_val)
+        brand_col = next((c for c in df.columns if 'brand' in c.lower()), None)
+        if brand_col:
+            df['Brand'] = df[brand_col].fillna('Unknown')
+        else:
+            df['Brand'] = 'N/A'
+        type_col = next((c for c in df.columns if 'article type' in c.lower() or 'commodity' in c.lower()), None)
+        if type_col:
+            df['Article type'] = df[type_col].fillna('Unknown')
+        else:
+            df['Article type'] = 'N/A'    
         sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
         if not sku_col: 
             sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
@@ -186,34 +196,59 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # Rader och Tabs logik...
     tabs = st.tabs(["📈 Hälsa", "🏆 Top 50 Revenue", "❤️ Wishlist", "📣 Marknadsföring", "🌍 Marknad", "🔄 Hybrid", "📝 Analys", "🔥 REA Manager"])
 
-    with tabs[0]: # HÄLSA
+   with tabs[0]: # 📈 HÄLSA
         st.subheader("Business Health Tracker: WoW & YoY Growth")
+        
+        # Säkerställ att vi har totalen för andelsberäkning
         total_nmv_cw = df_cw['NMV_EUR'].sum()
+        
+        # Skapa två kolumner för Brand och Article Type tabellerna
         c1, c2 = st.columns(2)
         
+        # Loopa igenom de två grupperingarna
         for col, grp in zip([c1, c2], ['Brand', 'Article type']):
-            # Gruppera data
+            # 1. Gruppera NMV för de tre perioderna
             cw_g = df_cw.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'CW_EUR'})
             lw_g = df_lw.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'LW_EUR'})
             ly_g = df_ly.groupby(grp)['NMV_EUR'].sum().reset_index().rename(columns={'NMV_EUR': 'LY_EUR'})
             
-            # Slå ihop
+            # 2. Slå ihop till en gemensam tabell (Health Matrix)
+            # Vi använder 'left' join från CW så vi ser vad vi säljer just nu
             h_m = cw_g.merge(lw_g, on=grp, how='left').merge(ly_g, on=grp, how='left').fillna(0)
             
-            # Beräkna nyckeltal
+            # 3. Beräkna KPI:er
+            # Andel av veckans totala försäljning
             h_m['Andel %'] = h_m['CW_EUR'] / total_nmv_cw if total_nmv_cw > 0 else 0
-            h_m['WoW %'] = (h_m['CW_EUR'] - h_m['LW_EUR']) / h_m['LW_EUR'].replace(0, 1)
-            h_m['YoY %'] = (h_m['CW_EUR'] - h_m['LY_EUR']) / h_m['LY_EUR'].replace(0, 1)
-            h_m['Status'] = h_m['YoY %'].apply(lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable"))
             
-            # Visa tabell
+            # Week-over-Week tillväxt
+            h_m['WoW %'] = (h_m['CW_EUR'] - h_m['LW_EUR']) / h_m['LW_EUR'].replace(0, 1)
+            
+            # Year-over-Year tillväxt
+            h_m['YoY %'] = (h_m['CW_EUR'] - h_m['LY_EUR']) / h_m['LY_EUR'].replace(0, 1)
+            
+            # Status-indikator baserat på YoY (5% tröskel för enkelhet)
+            h_m['Status'] = h_m['YoY %'].apply(
+                lambda x: "🟢 Growth" if x > 0.05 else ("🔻 Decline" if x < -0.05 else "➖ Stable")
+            )
+            
+            # 4. Presentera i kolumnen
             col.write(f"**Summering per {grp}**")
-            col.dataframe(h_m.sort_values('CW_EUR', ascending=False).style.format({
-                "CW_EUR": "€{:,.0f}", 
-                "Andel %": "{:.1%}", 
-                "WoW %": "{:+.1%}", 
+            
+            # Snygg formatering av siffror och färger
+            styled_df = h_m.sort_values('CW_EUR', ascending=False).style.format({
+                "CW_EUR": "€{:,.0f}",
+                "LW_EUR": "€{:,.0f}",
+                "LY_EUR": "€{:,.0f}",
+                "Andel %": "{:.1%}",
+                "WoW %": "{:+.1%}",
                 "YoY %": "{:+.1%}"
-            }), hide_index=True, use_container_width=True)
+            })
+            
+            col.dataframe(
+                styled_df,
+                hide_index=True,
+                use_container_width=True
+            )
 
     with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
