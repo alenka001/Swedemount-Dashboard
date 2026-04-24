@@ -313,6 +313,5 @@ with tabs[7]: # REA Manager
         st.dataframe(low_perf[['join_key', 'DiscountRate', 'Velocity', 'Action']], use_container_width=True)
         csv = low_perf.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 Ladda ner REA Plan", csv, "REA_Action_Plan.csv", "text/csv")
-        
 else:
     st.info("Vänligen ladda upp data för att starta.")
