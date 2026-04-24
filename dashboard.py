@@ -114,8 +114,14 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         df['NMV_EUR'] = df[nmv_col].apply(clean_val)
         sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
         df['Sold'] = df[sold_col].apply(clean_val)
+        disc_col = next((c for c in df.columns if 'discount rate' in c.lower()), None)
+        if disc_col:
+            df['DiscountRate'] = df[disc_col].apply(lambda x: clean_val(x, is_pct=True))
+        else:
+            df['DiscountRate'] = 0.0
         sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
-        if not sku_col: sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
+        if not sku_col: 
+            sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
         df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
         df['Zalando article variant'] = df['join_key']
         inv_sku_col, inv_name_col = 'zalando_article_variant', 'article_name'
