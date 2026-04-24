@@ -118,6 +118,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # Beräkna faktiskt % rabatt
     df_inv_raw['DiscountRate'] = (df_inv_raw[reg_price_col] - temp_disc_price) / df_inv_raw[reg_price_col].replace(0, 1)
     df_inv_raw['DiscountRate'] = df_inv_raw['DiscountRate'].clip(0, 1) # Säkerställ 0-100%
+    
     # --- NYTT: IDENTIFIERA PRISKONFLIKTER (Görs innan groupby) ---
     # Vi kollar i rådatan om en SKU har mer än ett unikt pris i 'discounted_price'
     conflict_skus = df_inv_raw.groupby(inv_sku_col)[disc_price_col].nunique()
@@ -131,6 +132,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             zfs_col: 'sum',
             pf_col: 'sum'
         }).reset_index()
+        conflict_report = conflict_report.rename(columns={
+            inv_sku_col: 'Zalando article variant',
+            inv_name_col: 'article_name',
+            disc_price_col: 'Pris-varianter'
+        })
+        conflict_report['Antal Priser'] = conflict_report['Pris-varianter'].apply(len)
     else:
         conflict_report = pd.DataFrame()
         
@@ -511,8 +518,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 label="📥 Ladda ner Rapport: Priskonflikter",
                 data=csv_conflict,
                 file_name='Zalando_Price_Conflicts.csv',
-                mime='text/csv',
-                key='conflict_btn'
+                mime='text/csv'
             )
         else:
             st.success("Inga priskonflikter hittades. Alla SKU:er har enhetlig prissättning!")
