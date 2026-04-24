@@ -448,9 +448,16 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         # Beräkna säljhastighet (Nu blir Velocity rimlig eftersom Stock > 0)
         rea_df['Velocity'] = rea_df['Sold'] / rea_df['Total Stock']
         
-        # Dela upp i strategier
+        # 2. Dela upp i strategier och SKAPA kolumnerna som saknas
         high_perf = rea_df[(rea_df['DiscountRate'] > 0.15) & (rea_df['Velocity'] > 0.1)].sort_values('Velocity', ascending=False).head(15).copy()
+        # --- HÄR SKAPAS DE SAKNADE KOLUMNERNA ---
+        high_perf['Strategi'] = "MARGINAL-BOOST"
+        high_perf['Rekommenderad Åtgärd'] = "Sänk rabatten - säljer för snabbt"
+
         low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05)].sort_values('Velocity', ascending=True).head(15).copy()
+        # --- HÄR SKAPAS DE SAKNADE KOLUMNERNA ---
+        low_perf['Strategi'] = "LAGERRENSNING"
+        low_perf['Rekommenderad Åtgärd'] = "Höj rabatten för att rensa lager"
         
         col1, col2 = st.columns(2)
         with col1:
@@ -480,7 +487,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         full_action_plan = pd.concat([high_perf, low_perf])
         
         if not full_action_plan.empty:
-            # Vi väljer ut exakt de kolumner som är intressanta för exporten
+            # Nu finns alla kolumner i listan nedanför!
             export_df = full_action_plan[[
                 'Zalando article variant', 
                 'article_name', 
