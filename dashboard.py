@@ -226,31 +226,30 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     yoy_growth = (nmv_cw_sek - nmv_ly_sek) / nmv_ly_sek if nmv_ly_sek > 0 else 0
     vs_budget = (nmv_cw_sek / weekly_budget_sek) - 1 if weekly_budget_sek > 0 else 0
     vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
+
+    with v1:
+        st.metric("Current Week (SEK)", f"{nmv_cw_sek:,.0f} kr")
+    with v2:
+        st.metric("Last Week (SEK)", f"{nmv_lw_sek:,.0f} kr")
+    with v3:
+        st.metric("Last Year (SEK)", f"{nmv_ly_sek:,.0f} kr")
+    with v4:
+        st.metric("Last Week (€)", f"€{nmv_lw_eur:,.0f}")
     
-    # Använd variabelnamnen från din sidebar
-    vs_budget = (nmv_cw_sek / weekly_budget_sek) - 1 if weekly_budget_sek > 0 else 0
-    vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
+    # --- EXECUTIVE SUMMARY: RAD 2 (PRESTATION & MÅL) ---
+    st.markdown("### 📈 Performance & Targets")
+    p1, p2, p3, p4 = st.columns(4)
 
-    with k1:
-        # HELA siffror i SEK för nuvarande vecka
-        st.metric("Total Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
-
-    with k2:
-        # TOTAL € föregående vecka
-        st.metric("Last Week Total (€)", f"€{nmv_lw_eur:,.0f}")
-
-    with k3:
-        st.metric("YoY Growth", f"{yoy_growth:+.1%}", delta=f"{yoy_growth:.1%}")
-
-    with k4:
-        # Visar hur mycket vi ligger över/under budget i SEK som delta
-        budget_diff = (nmv_cw_sek - weekly_budget_sek) / 1000
-        st.metric("Vs Budget", f"{vs_budget:+.1%}", delta=f"{budget_diff:,.0f}k SEK", delta_color="normal")
-
-    with k5:
-        # Visar hur mycket vi ligger över/under prognos i SEK som delta
-        forecast_diff = (nmv_cw_sek - weekly_prognos_sek) / 1000
-        st.metric("Vs Forecast", f"{vs_forecast:+.1%}", delta=f"{forecast_diff:,.0f}k SEK")
+    with p1:
+        st.metric("WoW Growth %", f"{wow_growth:+.1%}", delta=f"{wow_growth:.1%}")
+    with p2:
+        st.metric("YoY Growth %", f"{yoy_growth:+.1%}", delta=f"{yoy_growth:.1%}")
+    with p3:
+        budget_diff = (nmv_cw_sek - weekly_budget_sek)
+        st.metric("Vs Budget", f"{vs_budget:+.1%}", delta=f"{budget_diff:,.0f} kr", delta_color="normal")
+    with p4:
+        forecast_diff = (nmv_cw_sek - weekly_prognos_sek)
+        st.metric("Vs Forecast", f"{vs_forecast:+.1%}", delta=f"{forecast_diff:,.0f} kr")
 
     st.markdown("---") # Snygg linje som separerar Row 1 från tabbarna
 
