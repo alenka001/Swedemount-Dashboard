@@ -155,28 +155,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # Vi tar bara med produkter som faktiskt finns i lager (uteslut 0 stock)
     inv_map = inv_map[inv_map['Total Stock'] > 0]
     
-    # 6. Funktion för försäljningsfiler
-    def process_sales(df):
-        df.columns = [c.strip() for c in df.columns]
-        nmv_col = next((c for c in df.columns if c.lower() == 'nmv'), 'NMV')
-        df['NMV_EUR'] = df[nmv_col].apply(clean_val)
-        sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
-        df['Sold'] = df[sold_col].apply(clean_val)
-        sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
-        if not sku_col: 
-            sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
-        df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
-        return df
-
-    # 7. Kör processing
-    df_cw = process_sales(df_cw_raw)
-    df_lw = process_sales(df_lw_raw)
-    df_ly = process_sales(df_ly_raw)
-    
-    nmv_cw_sek = df_cw['NMV_EUR'].sum() * ex_rate
-    nmv_lw_sek = df_lw['NMV_EUR'].sum() * ex_rate
-    nmv_ly_sek = df_ly['NMV_EUR'].sum() * ex_rate
-    
     # --- FILTRERING ---
     # Vi tar bara med produkter som faktiskt finns i lager (uteslut 0 stock)
     inv_map = inv_map[inv_map['Total Stock'] > 0]
