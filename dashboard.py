@@ -221,6 +221,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     k1, k2, k3, k4, k5 = st.columns(5)
 
     # Beräkna tillväxt och diffar
+    nmv_lw_eur = nmv_lw_sek / ex_rate
     wow_growth = (nmv_cw_sek - nmv_lw_sek) / nmv_lw_sek if nmv_lw_sek > 0 else 0
     yoy_growth = (nmv_cw_sek - nmv_ly_sek) / nmv_ly_sek if nmv_ly_sek > 0 else 0
     
@@ -229,10 +230,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
 
     with k1:
-        st.metric("NMV Current Week", f"{nmv_cw_sek/1000:,.0f}k SEK")
+        # HELA siffror i SEK för nuvarande vecka
+        st.metric("Total Sales (SEK)", f"{nmv_cw_sek:,.0f} kr")
 
     with k2:
-        st.metric("WoW Growth", f"{wow_growth:+.1%}", delta=f"{wow_growth:.1%}")
+        # TOTAL € föregående vecka
+        st.metric("Last Week Total (€)", f"€{nmv_lw_eur:,.0f}")
 
     with k3:
         st.metric("YoY Growth", f"{yoy_growth:+.1%}", delta=f"{yoy_growth:.1%}")
