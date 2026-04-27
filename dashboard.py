@@ -216,17 +216,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # --- START PÅ DASHBOARD-VY ---
     st.title("🚀 Weekly Strategic Marketplace Board")
     
-    # --- ROW 1: EXECUTIVE SUMMARY ---
-    st.markdown("### 📊 Executive Summary (WoW & YoY)")
-    k1, k2, k3, k4, k5 = st.columns(5)
-
-    # Beräkna tillväxt och diffar
-    nmv_lw_eur = nmv_lw_sek / ex_rate
-    wow_growth = (nmv_cw_sek - nmv_lw_sek) / nmv_lw_sek if nmv_lw_sek > 0 else 0
-    yoy_growth = (nmv_cw_sek - nmv_ly_sek) / nmv_ly_sek if nmv_ly_sek > 0 else 0
-    vs_budget = (nmv_cw_sek / weekly_budget_sek) - 1 if weekly_budget_sek > 0 else 0
-    vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
-
+    # --- EXECUTIVE SUMMARY RAD 1: HELA SIFFROR ---
+    st.markdown("### 💰 Totals (Full Numbers)")
+    v1, v2, v3, v4 = st.columns(4)
     with v1:
         st.metric("Current Week (SEK)", f"{nmv_cw_sek:,.0f} kr")
     with v2:
@@ -235,23 +227,28 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         st.metric("Last Year (SEK)", f"{nmv_ly_sek:,.0f} kr")
     with v4:
         st.metric("Last Week (€)", f"€{nmv_lw_eur:,.0f}")
-    
-    # --- EXECUTIVE SUMMARY: RAD 2 (PRESTATION & MÅL) ---
+
+    # --- EXECUTIVE SUMMARY RAD 2: PRESTATION ---
     st.markdown("### 📈 Performance & Targets")
     p1, p2, p3, p4 = st.columns(4)
+
+    wow_growth = (nmv_cw_sek - nmv_lw_sek) / nmv_lw_sek if nmv_lw_sek > 0 else 0
+    yoy_growth = (nmv_cw_sek - nmv_ly_sek) / nmv_ly_sek if nmv_ly_sek > 0 else 0
+    vs_budget = (nmv_cw_sek / weekly_budget_sek) - 1 if weekly_budget_sek > 0 else 0
+    vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
 
     with p1:
         st.metric("WoW Growth %", f"{wow_growth:+.1%}", delta=f"{wow_growth:.1%}")
     with p2:
         st.metric("YoY Growth %", f"{yoy_growth:+.1%}", delta=f"{yoy_growth:.1%}")
     with p3:
-        budget_diff = (nmv_cw_sek - weekly_budget_sek)
-        st.metric("Vs Budget", f"{vs_budget:+.1%}", delta=f"{budget_diff:,.0f} kr", delta_color="normal")
+        b_diff = (nmv_cw_sek - weekly_budget_sek)
+        st.metric("Vs Budget", f"{vs_budget:+.1%}", delta=f"{b_diff:,.0f} kr", delta_color="normal")
     with p4:
-        forecast_diff = (nmv_cw_sek - weekly_prognos_sek)
-        st.metric("Vs Forecast", f"{vs_forecast:+.1%}", delta=f"{forecast_diff:,.0f} kr")
+        f_diff = (nmv_cw_sek - weekly_prognos_sek)
+        st.metric("Vs Forecast", f"{vs_forecast:+.1%}", delta=f"{f_diff:,.0f} kr")
 
-    st.markdown("---") # Snygg linje som separerar Row 1 från tabbarna
+    st.markdown("---")
 
     # --- TABS DEFINITION ---
     tabs = st.tabs([
