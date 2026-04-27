@@ -194,9 +194,17 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # --- START PÅ DASHBOARD-VY ---
     st.title("🚀 Weekly Strategic Marketplace Board")
     
+    # 1. UTFÖR ALLA BERÄKNINGAR FÖRST (Viktigt för att undvika NameError)
+    nmv_lw_eur = nmv_lw_sek / ex_rate
+    wow_growth = (nmv_cw_sek - nmv_lw_sek) / nmv_lw_sek if nmv_lw_sek > 0 else 0
+    yoy_growth = (nmv_cw_sek - nmv_ly_sek) / nmv_ly_sek if nmv_ly_sek > 0 else 0
+    vs_budget = (nmv_cw_sek / weekly_budget_sek) - 1 if weekly_budget_sek > 0 else 0
+    vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
+
     # --- EXECUTIVE SUMMARY RAD 1: HELA SIFFROR ---
     st.markdown("### 💰 Totals (Full Numbers)")
-    v1, v2, v3, v4 = st.columns(4)
+    v1, v2, v3, v4 = st.columns(4) # Här skapar vi v1, v2, v3, v4
+
     with v1:
         st.metric("Current Week (SEK)", f"{nmv_cw_sek:,.0f} kr")
     with v2:
@@ -204,16 +212,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     with v3:
         st.metric("Last Year (SEK)", f"{nmv_ly_sek:,.0f} kr")
     with v4:
+        # NU kommer nmv_lw_eur fungera eftersom den räknades ut ovan!
         st.metric("Last Week (€)", f"€{nmv_lw_eur:,.0f}")
 
     # --- EXECUTIVE SUMMARY RAD 2: PRESTATION ---
     st.markdown("### 📈 Performance & Targets")
     p1, p2, p3, p4 = st.columns(4)
-
-    wow_growth = (nmv_cw_sek - nmv_lw_sek) / nmv_lw_sek if nmv_lw_sek > 0 else 0
-    yoy_growth = (nmv_cw_sek - nmv_ly_sek) / nmv_ly_sek if nmv_ly_sek > 0 else 0
-    vs_budget = (nmv_cw_sek / weekly_budget_sek) - 1 if weekly_budget_sek > 0 else 0
-    vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
 
     with p1:
         st.metric("WoW Growth %", f"{wow_growth:+.1%}", delta=f"{wow_growth:.1%}")
