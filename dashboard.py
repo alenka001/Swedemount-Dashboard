@@ -213,40 +213,53 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     nmv_lw_sek = df_lw['NMV_EUR'].sum() * ex_rate
     nmv_ly_sek = df_ly['NMV_EUR'].sum() * ex_rate
     
+    # --- START PÅ DASHBOARD-VY ---
     st.title("🚀 Weekly Strategic Marketplace Board")
     
-    # Rader och Tabs logik...
-    tabs = st.tabs(["📈 Hälsa", "🏆 Top 50 Revenue", "❤️ Wishlist", "📣 Marknadsföring", "🌍 Marknad", "🔄 Hybrid", "📝 Analys", "🔥 REA Manager"])
-
+    # --- ROW 1: EXECUTIVE SUMMARY ---
     st.markdown("### 📊 Executive Summary (WoW & YoY)")
-    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
+    k1, k2, k3, k4, k5 = st.columns(5)
 
-    # Beräkna förändringar för metrics
+    # Beräkna tillväxt och diffar
     wow_growth = (nmv_cw_sek - nmv_lw_sek) / nmv_lw_sek if nmv_lw_sek > 0 else 0
     yoy_growth = (nmv_cw_sek - nmv_ly_sek) / nmv_ly_sek if nmv_ly_sek > 0 else 0
-    vs_budget = (nmv_cw_sek / budget_sek) - 1 if budget_sek > 0 else 0
+    
+    # Använd variabelnamnen från din sidebar
+    vs_budget = (nmv_cw_sek / weekly_budget_sek) - 1 if weekly_budget_sek > 0 else 0
+    vs_forecast = (nmv_cw_sek / weekly_prognos_sek) - 1 if weekly_prognos_sek > 0 else 0
 
-    with kpi1:
-     st.metric("NMV Current Week", f"{nmv_cw_sek/1000:,.0f}k SEK")
+    with k1:
+        st.metric("NMV Current Week", f"{nmv_cw_sek/1000:,.0f}k SEK")
 
-    with kpi2:
-     # WoW Growth med färgindikator
-     st.metric("WoW Growth", f"{wow_growth:+.1%}", delta=f"{wow_growth:.1%}")
+    with k2:
+        st.metric("WoW Growth", f"{wow_growth:+.1%}", delta=f"{wow_growth:.1%}")
 
-    with kpi3:
-     # YoY Growth med färgindikator
-     st.metric("YoY Growth", f"{yoy_growth:+.1%}", delta=f"{yoy_growth:.1%}")
+    with k3:
+        st.metric("YoY Growth", f"{yoy_growth:+.1%}", delta=f"{yoy_growth:.1%}")
 
-    with kpi4:
-     # Mot Budget
-     st.metric("Vs Budget", f"{vs_budget:+.1%}", delta=f"{(nmv_cw_sek - budget_sek)/1000:,.0f}k", delta_color="normal")
+    with k4:
+        # Visar hur mycket vi ligger över/under budget i SEK som delta
+        budget_diff = (nmv_cw_sek - weekly_budget_sek) / 1000
+        st.metric("Vs Budget", f"{vs_budget:+.1%}", delta=f"{budget_diff:,.0f}k SEK", delta_color="normal")
 
-    with kpi5:
-     # Mot Prognos
-     vs_forecast = (nmv_cw_sek / forecast_sek) - 1
-     st.metric("Vs Forecast", f"{vs_forecast:+.1%}", delta=f"{(nmv_cw_sek - forecast_sek)/1000:,.0f}k")
+    with k5:
+        # Visar hur mycket vi ligger över/under prognos i SEK som delta
+        forecast_diff = (nmv_cw_sek - weekly_prognos_sek) / 1000
+        st.metric("Vs Forecast", f"{vs_forecast:+.1%}", delta=f"{forecast_diff:,.0f}k SEK")
 
-    st.markdown("---") # En visuell linje innan tabbarna börjar
+    st.markdown("---") # Snygg linje som separerar Row 1 från tabbarna
+
+    # --- TABS DEFINITION ---
+    tabs = st.tabs([
+        "📈 Hälsa", 
+        "🏆 Top 50 Revenue", 
+        "❤️ Wishlist", 
+        "📣 Marknadsföring", 
+        "🌍 Marknad", 
+        "🔄 Hybrid", 
+        "📝 Analys", 
+        "🔥 REA Manager"
+    ])
 
     with tabs[0]: # 📈 HÄLSA
         st.subheader("Business Health Tracker: WoW & YoY Growth")
