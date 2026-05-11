@@ -180,7 +180,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         if not sku_col: 
             sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
         df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
+        val = df[sku_col].astype(str).str.strip().str.upper()
+        df['join_key'] = val
+        df['Article variant'] = val
+        
         return df
+        
 
     # 7. Kör processing
     df_cw = process_sales(df_cw_raw)
@@ -298,9 +303,14 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 use_container_width=True
             )
 
-    with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
+    with tabs[1]: # 🏆 TOP 50
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
-        cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
+        
+        # Vi grupperar på 'join_key' (som vi vet finns) och tar med 'Article variant'
+        # Vi använder en lista på de kolumner som faktiskt finns
+        available_cols = [c for c in ['join_key', 'Article variant'] if c in df_cw.columns]
+        
+        cw_top = df_cw.groupby(available_cols)[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
         
         lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index()
