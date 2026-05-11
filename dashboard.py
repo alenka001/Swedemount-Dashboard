@@ -487,47 +487,61 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
             for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
-    with tabs[7]: # 🔥 REA Manager
-        st.subheader("🔥 REA Manager: Strategic Action Plan")
+    with tabs[7]: # 🔥 REA Manager (Expert Version)
+        st.subheader("🎯 REA Manager: Margin Recovery & Stock Health")
         
-        # Merge försäljning med det filtrerade lagret
+        # 1. Förbered data
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
         
-        # Beräkna säljhastighet (Nu blir Velocity rimlig eftersom Stock > 0)
-        rea_df['Velocity'] = rea_df['Sold'] / rea_df['Total Stock']
+        # Beräkna Weeks Cover (Hur många veckor räcker lagret?)
+        # Vi lägger till 0.1 för att undvika division med noll
+        rea_df['Weeks Cover'] = rea_df['Total Stock'] / (rea_df['Sold'] + 0.1)
         
-        # 2. Dela upp i strategier och SKAPA kolumnerna som saknas
-        high_perf = rea_df[(rea_df['DiscountRate'] > 0.15) & (rea_df['Velocity'] > 0.1)].sort_values('Velocity', ascending=False).head(15).copy()
-        # --- HÄR SKAPAS DE SAKNADE KOLUMNERNA ---
-        high_perf['Strategi'] = "MARGINAL-BOOST"
-        high_perf['Rekommenderad Åtgärd'] = "Sänk rabatten - säljer för snabbt"
+        # --- KATEGORI 1: MONEY ON THE TABLE (Sänk rabatten!) ---
+        # Logik: Lager > 50, Rabatt > 15%, Lagret räcker < 5 veckor
+        money_on_table = rea_df[
+            (rea_df['Total Stock'] > 50) & 
+            (rea_df['DiscountRate'] > 0.15) & 
+            (rea_df['Weeks Cover'] < 5)
+        ].sort_values('Weeks Cover').copy()
+        
+        money_on_table['Strategi'] = "SÄNK RABATTEN"
+        money_on_table['Rekommendation'] = "Säljtakten är för hög för lagersaldot. Minska rabatt för att rädda marginal."
 
-        low_perf = rea_df[(rea_df['DiscountRate'] < 0.10) & (rea_df['Velocity'] < 0.05)].sort_values('Velocity', ascending=True).head(15).copy()
-        # --- HÄR SKAPAS DE SAKNADE KOLUMNERNA ---
-        low_perf['Strategi'] = "LAGERRENSNING"
-        low_perf['Rekommenderad Åtgärd'] = "Höj rabatten för att rensa lager"
+        # --- KATEGORI 2: STUCK IN WAREHOUSE (Höj rabatten!) ---
+        # Logik: Lager > 100, Rabatt < 10%, Lagret räcker > 20 veckor (eller säljer inget)
+        stuck_stock = rea_df[
+            (rea_df['Total Stock'] > 100) & 
+            (rea_df['DiscountRate'] < 0.10) & 
+            ((rea_df['Weeks Cover'] > 20) | (rea_df['Sold'] == 0))
+        ].sort_values('Total Stock', ascending=False).copy()
         
+        stuck_stock['Strategi'] = "ÖKA RABATTEN"
+        stuck_stock['Rekommendation'] = "Djupt lager som inte rör sig. Behöver en rea-kick för att frigöra kapital."
+
+        # --- VISUALISERING ---
         col1, col2 = st.columns(2)
+        
         with col1:
-            st.warning("📉 Minska Rabatt (Tjänar för lite marginal)")
-            # Snyggare formatering utan decimaler på Sold/Stock
-            st.dataframe(high_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
-                         .style.format({
-                             'DiscountRate': '{:.1%}', 
-                             'Velocity': '{:.2f}', 
-                             'Sold': '{:,.0f}', 
-                             'Total Stock': '{:,.0f}'
-                         }), use_container_width=True, hide_index=True)
+            st.error("📉 Money on the Table (Sälj takten för hög)")
+            st.write("Produkter med djupt lager (>50st) som säljer slut för snabbt.")
+            st.dataframe(money_on_table[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'Total Stock']]
+                         .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v'}), 
+                         use_container_width=True, hide_index=True)
 
         with col2:
-            st.info("📈 Öka Rabatt (Säljer för långsamt)")
-            st.dataframe(low_perf[['Zalando article variant', 'DiscountRate', 'Velocity', 'Sold', 'Total Stock']]
-                         .style.format({
-                             'DiscountRate': '{:.1%}', 
-                             'Velocity': '{:.2f}', 
-                             'Sold': '{:,.0f}', 
-                             'Total Stock': '{:,.0f}'
-                         }), use_container_width=True, hide_index=True)
+            st.warning("📦 Stuck in Warehouse (Döda lager)")
+            st.write("Volymprodukter (>100st) som säljer för långsamt eller inte alls.")
+            st.dataframe(stuck_stock[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'Total Stock']]
+                         .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v'}), 
+                         use_container_width=True, hide_index=True)
+
+        # --- EXPORT ---
+        st.markdown("---")
+        full_plan = pd.concat([money_on_table, stuck_stock])
+        if not full_plan.empty:
+            csv = full_plan[['Zalando article variant', 'article_name', 'Total Stock', 'Weeks Cover', 'DiscountRate', 'Strategi', 'Rekommendation']].to_csv(index=False).encode('utf-8-sig')
+            st.download_button("📥 Ladda ner Strategisk Action Plan", csv, "Zalando_Action_Plan.csv", "text/csv")
 
         # --- NY SEKTION: PRISKONFLIKTER ---
         st.markdown("---")
