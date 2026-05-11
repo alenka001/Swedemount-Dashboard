@@ -580,17 +580,15 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         full_action_plan = pd.concat([high_perf, low_perf])
         
         if not full_action_plan.empty:
-            # Nu finns alla kolumner i listan nedanför!
             export_df = full_action_plan[[
-                'Zalando article variant', 
-                'article_name', 
-                'Total Stock', 
-                'Sold', 
-                'Velocity', 
-                'DiscountRate', 
-                'Strategi', 
-                'Rekommenderad Åtgärd'
-            ]].copy()
+            'Zalando article variant', 
+            'article_name', 
+            'Total Stock', 
+            'Weeks Cover',  # Vi bytte Velocity mot Weeks Cover
+            'DiscountRate', 
+            'Strategi', 
+            'Rekommendation' # Vi bytte namn på denna kolumn tidigare
+        ]].copy()
             
             # Formatera DiscountRate till %-text för Excel
             export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
