@@ -502,6 +502,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         
         # 1. Förbered data
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
+        rea_df = rea_df.rename(columns={inv_sku_col: 'Zalando article variant'})
         
         # Beräkna Weeks Cover (Hur många veckor räcker lagret?)
         # Vi lägger till 0.1 för att undvika division med noll
