@@ -577,7 +577,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         st.markdown("---")
         
         # Slå ihop listorna
-        full_action_plan = pd.concat([high_perf, low_perf])
+        full_action_plan = pd.concat([money_on_table, stuck_stock])
         
         if not full_action_plan.empty:
             export_df = full_action_plan[[
