@@ -159,34 +159,38 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     # Vi tar bara med produkter som faktiskt finns i lager (uteslut 0 stock)
     inv_map = inv_map[inv_map['Total Stock'] > 0]
     
-    # 6. Funktion för försäljningsfiler
+    # --- 6. DEN ENDA FUNKTIONEN FÖR FÖRSÄLJNINGSFILER ---
     def process_sales(df):
         df.columns = [c.strip() for c in df.columns]
         nmv_col = next((c for c in df.columns if c.lower() == 'nmv'), 'NMV')
         df['NMV_EUR'] = df[nmv_col].apply(clean_val)
         sold_col = next((c for c in df.columns if 'sold articles' in c.lower()), 'Sold articles')
         df['Sold'] = df[sold_col].apply(clean_val)
-        brand_col = next((c for c in df.columns if 'brand' in c.lower()), None)
-        if brand_col:
-            df['Brand'] = df[brand_col].fillna('Unknown')
-        else:
-            df['Brand'] = 'N/A'
-        type_col = next((c for c in df.columns if 'article type' in c.lower() or 'commodity' in c.lower()), None)
-        if type_col:
-            df['Article type'] = df[type_col].fillna('Unknown')
-        else:
-            df['Article type'] = 'N/A'    
-        sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
-        if not sku_col: 
-            sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
-        df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
+        
+        # Hitta Brand & Type
+        bc = next((c for c in df.columns if 'brand' in c.lower()), None)
+        df['Brand'] = df[bc].fillna('Unknown') if bc else 'N/A'
+        tc = next((c for c in df.columns if 'article type' in c.lower() or 'commodity' in c.lower()), None)
+        df['Article type'] = df[tc].fillna('Unknown') if tc else 'N/A'
+        
+        # --- SKU LOGIK (Säker mot länder) ---
+        sku_col = next((c for c in df.columns if 'article variant' in c.lower() and 'country' not in c.lower()), None)
+        if not sku_col:
+            sku_col = next((c for c in df.columns if 'variant' in c.lower() and 'country' not in c.lower()), df.columns[0])
+            
+        # Skapa nycklar som Top 50 och REA-fliken behöver
+        val = df[sku_col].astype(str).str.strip().str.upper()
+        df['join_key'] = val
+        df['Article variant'] = val
+        
         return df
 
-    # 7. Kör processing
+    # --- 7. KÖR PROCESSING (Endast en gång!) ---
     df_cw = process_sales(df_cw_raw)
     df_lw = process_sales(df_lw_raw)
     df_ly = process_sales(df_ly_raw)
     
+    # Beräkna totaler för hela dashboarden
     nmv_cw_sek = df_cw['NMV_EUR'].sum() * ex_rate
     nmv_lw_sek = df_lw['NMV_EUR'].sum() * ex_rate
     nmv_ly_sek = df_ly['NMV_EUR'].sum() * ex_rate
