@@ -176,13 +176,19 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             df['Article type'] = df[type_col].fillna('Unknown')
         else:
             df['Article type'] = 'N/A'    
-        sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
+        sku_col = next((c for c in df.columns if 'article variant' in c.lower()), None)
         if not sku_col: 
-            sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
+            sku_col = next((c for c in df.columns if 'variant' in c.lower() and 'country' not in c.lower()), None)
+
+        if not sku_col:
+            sku_col = df.columns[0]
+            
         df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
         val = df[sku_col].astype(str).str.strip().str.upper()
         df['join_key'] = val
         df['Article variant'] = val
+        
+        
         
         return df
         
@@ -310,14 +316,14 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         # Vi använder en lista på de kolumner som faktiskt finns
         available_cols = [c for c in ['join_key', 'Article variant'] if c in df_cw.columns]
         
-        cw_top = df_cw.groupby(available_cols)[['NMV_EUR', 'Sold']].sum().reset_index()
+        cw_top = df_cw.groupby('join_key')[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
         
-        lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index()
+        lw_top = df_lw.groupby('join_key')[['NMV_EUR']].sum().reset_index()
         lw_top['Rank_LW'] = lw_top['NMV_EUR'].rank(ascending=False, method='min')
         
         t50 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').fillna(0)
-        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
+        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left')
         
         t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
         t50_f = t50.sort_values('Rank_CW').head(50)
