@@ -618,23 +618,23 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
         st.markdown("---")
         
-        # Slå ihop listorna
-        full_action_plan = pd.concat([high_perf, low_perf])
+        # Vi slår ihop de NYA listorna (de som faktiskt finns i minnet nu)
+        full_action_plan = pd.concat([money_on_table, stuck_stock])
         
         if not full_action_plan.empty:
-            # Nu finns alla kolumner i listan nedanför!
+            # Vi väljer de kolumner som vi skapade i den nya logiken
             export_df = full_action_plan[[
                 'Zalando article variant', 
                 'article_name', 
                 'Total Stock', 
                 'Sold', 
-                'Velocity', 
+                'Weeks Cover',   # Ersatte Velocity
                 'DiscountRate', 
                 'Strategi', 
-                'Rekommenderad Åtgärd'
+                'Rekommendation' # Ersatte Rekommenderad Åtgärd
             ]].copy()
             
-            # Formatera DiscountRate till %-text för Excel
+            # Gör rabatten snygg för Excel (t.ex. 20%)
             export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
             
             csv = export_df.to_csv(index=False).encode('utf-8-sig')
@@ -642,8 +642,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             st.download_button(
                 label="📥 Ladda ner Strategisk Action Plan",
                 data=csv,
-                file_name='Zalando_REA_Action_Plan.csv',
-                mime='text/csv'
+                file_name='Zalando_Strategic_Action_Plan.csv',
+                mime='text/csv',
+                key='strategic_plan_v2' # Unikt ID för knappen
             )
         else:
             st.write("Inga produkter matchar kriterierna för åtgärder just nu.")
