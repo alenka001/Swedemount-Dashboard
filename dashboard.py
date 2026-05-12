@@ -557,50 +557,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                              'Total Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
 
-        # --- SEKTION: PRISKONFLIKTER (KVALITETSKONTROLL) ---
-        st.markdown("---")
-        st.subheader("⚠️ Priskonflikter (Dubbla priser på samma SKU)")
-        if not conflict_report.empty:
-            st.error(f"Hittade {len(conflict_report)} artiklar med priskonflikter i lagerfilen!")
-            st.dataframe(conflict_report[['Zalando article variant', 'article_name', 'Pris-varianter', 'Antal Priser']], 
-                         use_container_width=True, hide_index=True)
-            
-            csv_conflict = conflict_report.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 Ladda ner Rapport: Priskonflikter", csv_conflict, "Zalando_Price_Conflicts.csv", "text/csv", key='dl_conf')
-        else:
-            st.success("Inga priskonflikter hittades. Prissättningen är enhetlig!")
-
-        # --- EXPORT: STRATEGISK ACTION PLAN ---
-        st.markdown("---")
-        # Här slår vi ihop de nya variablerna (money_on_table och stuck_stock)
-        full_plan = pd.concat([money_on_table, stuck_stock])
-        
-        if not full_plan.empty:
-            # Vi väljer exakt de kolumner som finns i de nya tabellerna
-            export_df = full_plan[[
-                'Zalando article variant', 
-                'article_name', 
-                'Total Stock', 
-                'Weeks Cover', 
-                'DiscountRate', 
-                'Strategi', 
-                'Rekommendation'
-            ]].copy()
-            
-            # Snygga till DiscountRate för Excel
-            export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
-            
-            csv_plan = export_df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 Ladda ner Strategisk Action Plan",
-                data=csv_plan,
-                file_name='Zalando_Strategic_Action_Plan.csv',
-                mime='text/csv',
-                key='dl_action_plan'
-            )
-        else:
-            st.write("Inga produkter matchar kriterierna för strategiska åtgärder just nu.")
-
 
         # --- NY SEKTION: PRISKONFLIKTER ---
         st.markdown("---")
