@@ -176,25 +176,11 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             df['Article type'] = df[type_col].fillna('Unknown')
         else:
             df['Article type'] = 'N/A'    
-        sku_col = next((c for c in df.columns if 'article variant' in c.lower()), None)
-        if not sku_col:
-            sku_col = next((c for c in df.columns if 
-                            'variant' in c.lower() and 
-                            not any(x in c.lower() for x in ['country', 'market', 'land', 'store', 'size'])
-                           ), None)
-
-        if not sku_col:
-            sku_col = df.columns[0]
-            
+        sku_col = next((c for c in df.columns if 'zalando article variant' in c.lower()), None)
+        if not sku_col: 
+            sku_col = next((c for c in df.columns if 'variant' in c.lower()), df.columns[0])
         df['join_key'] = df[sku_col].astype(str).str.strip().str.upper()
-        val = df[sku_col].astype(str).str.strip().str.upper()
-        df['join_key'] = val
-        df['Article variant'] = val
-        
-        
-        
         return df
-        
 
     # 7. Kör processing
     df_cw = process_sales(df_cw_raw)
@@ -312,21 +298,16 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 use_container_width=True
             )
 
-    with tabs[1]: # 🏆 TOP 50
+    with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
         st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
-        
-        # Vi grupperar på 'join_key' (som vi vet finns) och tar med 'Article variant'
-        # Vi använder en lista på de kolumner som faktiskt finns
-        available_cols = [c for c in ['join_key', 'Article variant'] if c in df_cw.columns]
-        
-        cw_top = df_cw.groupby('join_key')[['NMV_EUR', 'Sold']].sum().reset_index()
+        cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
         
-        lw_top = df_lw.groupby('join_key')[['NMV_EUR']].sum().reset_index()
+        lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index()
         lw_top['Rank_LW'] = lw_top['NMV_EUR'].rank(ascending=False, method='min')
         
         t50 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').fillna(0)
-        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left')
+        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
         
         t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
         t50_f = t50.sort_values('Rank_CW').head(50)
@@ -506,89 +487,111 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
             for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
-    with tabs[7]: # 🔥 REA Manager (Expert Version)
+        with tabs[7]: # 🔥 REA Manager: Strategic Action Plan
         st.subheader("🎯 REA Manager: Margin Recovery & Stock Health")
         
-        # 1. Förbered data
+        # 1. Förbered data & Beräkna Weeks Cover
+        # Vi mergar försäljning (df_cw) med lager (inv_map)
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
+        
+        # Säkerställ namn-standardisering för display
         rea_df = rea_df.rename(columns={inv_sku_col: 'Zalando article variant'})
         
-        # Beräkna Weeks Cover (Hur många veckor räcker lagret?)
-        # Vi lägger till 0.1 för att undvika division med noll
+        # Weeks Cover: Hur många veckor räcker nuvarande lager med nuvarande säljtakt?
         rea_df['Weeks Cover'] = rea_df['Total Stock'] / (rea_df['Sold'] + 0.1)
         
-        # --- KATEGORI 1: MONEY ON THE TABLE (Sänk rabatten!) ---
-        # Logik: Lager > 50, Rabatt > 15%, Lagret räcker < 5 veckor
+        # --- KATEGORI 1: MONEY ON THE TABLE (SÄNK RABATTEN) ---
+        # Logik: Lager > 50st (inga slattar), Rabatt > 15%, Lagret räcker < 5 veckor
         money_on_table = rea_df[
             (rea_df['Total Stock'] > 50) & 
             (rea_df['DiscountRate'] > 0.15) & 
             (rea_df['Weeks Cover'] < 5)
         ].sort_values('Weeks Cover').copy()
         
-        money_on_table['Strategi'] = "SÄNK RABATTEN"
-        money_on_table['Rekommendation'] = "Säljtakten är för hög för lagersaldot. Minska rabatt för att rädda marginal."
+        money_on_table['Strategi'] = "MARGINAL-BOOST"
+        money_on_table['Rekommendation'] = "Säljer för snabbt. Sänk rabatten för att rädda marginal."
 
-        # --- KATEGORI 2: STUCK IN WAREHOUSE (Höj rabatten!) ---
-        # Logik: Lager > 100, Rabatt < 10%, Lagret räcker > 20 veckor (eller säljer inget)
+        # --- KATEGORI 2: STUCK IN WAREHOUSE (HÖJ RABATTEN) ---
+        # Logik: Lager > 100st (volym), Rabatt < 10%, Lagret räcker > 20 veckor (eller 0 sålda)
         stuck_stock = rea_df[
             (rea_df['Total Stock'] > 100) & 
             (rea_df['DiscountRate'] < 0.10) & 
             ((rea_df['Weeks Cover'] > 20) | (rea_df['Sold'] == 0))
         ].sort_values('Total Stock', ascending=False).copy()
         
-        stuck_stock['Strategi'] = "ÖKA RABATTEN"
-        stuck_stock['Rekommendation'] = "Djupt lager som inte rör sig. Behöver en rea-kick för att frigöra kapital."
+        stuck_stock['Strategi'] = "LAGERRENSNING"
+        stuck_stock['Rekommendation'] = "Djupt lager som står stilla. Höj rabatten för att frigöra kapital."
 
-        # --- VISUALISERING ---
-        col1, col2 = st.columns(2)
+        # --- VISUALISERING I DASHBOARD ---
+        c1, c2 = st.columns(2)
         
-        with col1:
-            st.error("📉 Money on the Table (Sälj takten för hög)")
-            st.write("Produkter med djupt lager (>50st) som säljer slut för snabbt.")
+        with c1:
+            st.error("📉 Money on the Table (Sänk rabatt)")
+            st.caption("Volymartiklar (>50st) som säljer slut för snabbt pga för hög rea.")
             st.dataframe(money_on_table[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'Total Stock']]
-                         .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v'}), 
-                         use_container_width=True, hide_index=True)
+                         .style.format({
+                             'DiscountRate': '{:.1%}', 
+                             'Weeks Cover': '{:.1f} v', 
+                             'Sold': '{:,.0f}', 
+                             'Total Stock': '{:,.0f}'
+                         }), use_container_width=True, hide_index=True)
 
-        with col2:
-            st.warning("📦 Stuck in Warehouse (Döda lager)")
-            st.write("Volymprodukter (>100st) som säljer för långsamt eller inte alls.")
+        with c2:
+            st.warning("📦 Stuck in Warehouse (Höj rabatt)")
+            st.caption("Stora lager (>100st) som inte rör sig. Binder kapital.")
             st.dataframe(stuck_stock[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'Total Stock']]
-                         .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v'}), 
-                         use_container_width=True, hide_index=True)
+                         .style.format({
+                             'DiscountRate': '{:.1%}', 
+                             'Weeks Cover': '{:.1f} v', 
+                             'Sold': '{:,.0f}', 
+                             'Total Stock': '{:,.0f}'
+                         }), use_container_width=True, hide_index=True)
 
-       # --- EXPORT (Denna version använder de nya namnen) ---
+        # --- SEKTION: PRISKONFLIKTER (KVALITETSKONTROLL) ---
         st.markdown("---")
+        st.subheader("⚠️ Priskonflikter (Dubbla priser på samma SKU)")
+        if not conflict_report.empty:
+            st.error(f"Hittade {len(conflict_report)} artiklar med priskonflikter i lagerfilen!")
+            st.dataframe(conflict_report[['Zalando article variant', 'article_name', 'Pris-varianter', 'Antal Priser']], 
+                         use_container_width=True, hide_index=True)
+            
+            csv_conflict = conflict_report.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("📥 Ladda ner Rapport: Priskonflikter", csv_conflict, "Zalando_Price_Conflicts.csv", "text/csv", key='dl_conf')
+        else:
+            st.success("Inga priskonflikter hittades. Prissättningen är enhetlig!")
 
-            # Här slår vi ihop de NYA variablerna
-            full_plan = pd.concat([money_on_table, stuck_stock])
-
-        if not full_plan.empty:
-        # Vi väljer exakt de kolumner som finns i de nya tabellerna
-        export_df = full_plan[[
-            'Zalando article variant', 
-            'article_name', 
-            'Total Stock', 
-            'Weeks Cover',   # Viktigt: Ersatte Velocity
-            'DiscountRate', 
-            'Strategi', 
-            'Rekommendation' # Viktigt: Matchar namnet i de nya filtren
-        ]].copy()
-    
-    # Gör rabatten snygg för Excel
-    export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
-    
-    csv = export_df.to_csv(index=False).encode('utf-8-sig')
-    
-    st.download_button(
-        label="📥 Ladda ner Strategisk Action Plan",
-        data=csv,
-        file_name='Zalando_Action_Plan.csv',
-        mime='text/csv',
-        key='export_action_plan_final' # Unikt ID
-    )
-    else:
-        st.write("Inga produkter matchar kriterierna för åtgärder just nu.")
+        # --- EXPORT: STRATEGISK ACTION PLAN ---
+        st.markdown("---")
+        # Här slår vi ihop de nya variablerna (money_on_table och stuck_stock)
+        full_plan = pd.concat([money_on_table, stuck_stock])
         
+        if not full_plan.empty:
+            # Vi väljer exakt de kolumner som finns i de nya tabellerna
+            export_df = full_plan[[
+                'Zalando article variant', 
+                'article_name', 
+                'Total Stock', 
+                'Weeks Cover', 
+                'DiscountRate', 
+                'Strategi', 
+                'Rekommendation'
+            ]].copy()
+            
+            # Snygga till DiscountRate för Excel
+            export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
+            
+            csv_plan = export_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Ladda ner Strategisk Action Plan",
+                data=csv_plan,
+                file_name='Zalando_Strategic_Action_Plan.csv',
+                mime='text/csv',
+                key='dl_action_plan'
+            )
+        else:
+            st.write("Inga produkter matchar kriterierna för strategiska åtgärder just nu.")
+
+
         # --- NY SEKTION: PRISKONFLIKTER ---
         st.markdown("---")
         st.subheader("⚠️ Priskonflikter (Dubbla priser på samma SKU)")
@@ -612,18 +615,20 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         st.markdown("---")
         
         # Slå ihop listorna
-        full_action_plan = pd.concat([money_on_table, stuck_stock])
+        full_action_plan = pd.concat([high_perf, low_perf])
         
         if not full_action_plan.empty:
+            # Nu finns alla kolumner i listan nedanför!
             export_df = full_action_plan[[
-            'Zalando article variant', 
-            'article_name', 
-            'Total Stock', 
-            'Weeks Cover',  # Vi bytte Velocity mot Weeks Cover
-            'DiscountRate', 
-            'Strategi', 
-            'Rekommendation' # Vi bytte namn på denna kolumn tidigare
-        ]].copy()
+                'Zalando article variant', 
+                'article_name', 
+                'Total Stock', 
+                'Sold', 
+                'Velocity', 
+                'DiscountRate', 
+                'Strategi', 
+                'Rekommenderad Åtgärd'
+            ]].copy()
             
             # Formatera DiscountRate till %-text för Excel
             export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
