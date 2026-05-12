@@ -487,7 +487,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
             for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
-        with tabs[7]: # 🔥 REA Manager: Strategic Action Plan
+    with tabs[7]: # 🔥 REA Manager: Strategic Action Plan
         st.subheader("🎯 REA Manager: Margin Recovery & Stock Health")
         
         # 1. Förbered data & Beräkna Weeks Cover
