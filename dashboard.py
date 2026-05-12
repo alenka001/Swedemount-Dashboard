@@ -312,6 +312,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         
         t50 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').fillna(0)
         t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
+
+        # --- FIX: Säkerställ unika kolumnnamn även här ---
+        t50 = t50.loc[:, ~t50.columns.duplicated()]
         
         t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
         t50_f = t50.sort_values('Rank_CW').head(50)
@@ -497,6 +500,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         # 1. Förbered data & Beräkna Weeks Cover
         # Vi mergar försäljning (df_cw) med lager (inv_map)
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
+
+        # --- FIX: RADERA DUBBLETTER AV KOLUMN-NAMN ---
+        rea_df = rea_df.loc[:, ~rea_df.columns.duplicated()]
         
         # Säkerställ namn-standardisering för display
         rea_df = rea_df.rename(columns={inv_sku_col: 'Zalando article variant'})
