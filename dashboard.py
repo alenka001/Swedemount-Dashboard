@@ -501,11 +501,11 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         # Vi mergar försäljning (df_cw) med lager (inv_map)
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
 
+        # 2. Döpa om kolumnen (detta kan ibland skapa en dubblett om namnet fanns i df_cw)
+        rea_df = rea_df.rename(columns={inv_sku_col: 'Zalando article variant'})
+
         # --- FIX: RADERA DUBBLETTER AV KOLUMN-NAMN ---
         rea_df = rea_df.loc[:, ~rea_df.columns.duplicated()]
-        
-        # Säkerställ namn-standardisering för display
-        rea_df = rea_df.rename(columns={inv_sku_col: 'Zalando article variant'})
         
         # Weeks Cover: Hur många veckor räcker nuvarande lager med nuvarande säljtakt?
         rea_df['Weeks Cover'] = rea_df['Total Stock'] / (rea_df['Sold'] + 0.1)
