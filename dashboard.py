@@ -177,8 +177,11 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         else:
             df['Article type'] = 'N/A'    
         sku_col = next((c for c in df.columns if 'article variant' in c.lower()), None)
-        if not sku_col: 
-            sku_col = next((c for c in df.columns if 'variant' in c.lower() and 'country' not in c.lower()), None)
+        if not sku_col:
+            sku_col = next((c for c in df.columns if 
+                            'variant' in c.lower() and 
+                            not any(x in c.lower() for x in ['country', 'market', 'land', 'store', 'size'])
+                           ), None)
 
         if not sku_col:
             sku_col = df.columns[0]
@@ -553,13 +556,39 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                          .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v'}), 
                          use_container_width=True, hide_index=True)
 
-        # --- EXPORT ---
+       # --- EXPORT (Denna version använder de nya namnen) ---
         st.markdown("---")
-        full_plan = pd.concat([money_on_table, stuck_stock])
-        if not full_plan.empty:
-            csv = full_plan[['Zalando article variant', 'article_name', 'Total Stock', 'Weeks Cover', 'DiscountRate', 'Strategi', 'Rekommendation']].to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 Ladda ner Strategisk Action Plan", csv, "Zalando_Action_Plan.csv", "text/csv")
 
+            # Här slår vi ihop de NYA variablerna
+            full_plan = pd.concat([money_on_table, stuck_stock])
+
+        if not full_plan.empty:
+        # Vi väljer exakt de kolumner som finns i de nya tabellerna
+        export_df = full_plan[[
+            'Zalando article variant', 
+            'article_name', 
+            'Total Stock', 
+            'Weeks Cover',   # Viktigt: Ersatte Velocity
+            'DiscountRate', 
+            'Strategi', 
+            'Rekommendation' # Viktigt: Matchar namnet i de nya filtren
+        ]].copy()
+    
+    # Gör rabatten snygg för Excel
+    export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
+    
+    csv = export_df.to_csv(index=False).encode('utf-8-sig')
+    
+    st.download_button(
+        label="📥 Ladda ner Strategisk Action Plan",
+        data=csv,
+        file_name='Zalando_Action_Plan.csv',
+        mime='text/csv',
+        key='export_action_plan_final' # Unikt ID
+    )
+    else:
+        st.write("Inga produkter matchar kriterierna för åtgärder just nu.")
+        
         # --- NY SEKTION: PRISKONFLIKTER ---
         st.markdown("---")
         st.subheader("⚠️ Priskonflikter (Dubbla priser på samma SKU)")
