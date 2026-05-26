@@ -501,13 +501,16 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         # Vi mergar försäljning (df_cw) med lager (inv_map)
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
 
-        # 2. Döpa om kolumnen (detta kan ibland skapa en dubblett om namnet fanns i df_cw)
-        rea_df = rea_df.rename(columns={inv_sku_col: 'Zalando article variant'})
+        # --- FIX: Lägg till zfs_col i rename-satsen så att 'ZFS Stock' definieras! ---
+        rea_df = rea_df.rename(columns={
+            inv_sku_col: 'Zalando article variant',
+            zfs_col: 'ZFS Stock'
+        })
 
         # --- FIX: RADERA DUBBLETTER AV KOLUMN-NAMN ---
         rea_df = rea_df.loc[:, ~rea_df.columns.duplicated()]
         
-        # Weeks Cover: Hur många veckor räcker nuvarande lager med nuvarande säljtakt?
+        # Weeks Cover: Hur många veckor räcker nuvarande ZFS-lager med nuvarande säljtakt?
         rea_df['Weeks Cover'] = rea_df['ZFS Stock'] / (rea_df['Sold'] + 0.1)
         
         # --- KATEGORI 1: MONEY ON THE TABLE (SÄNK RABATTEN) ---
@@ -519,7 +522,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         ].sort_values('Weeks Cover').copy()
         
         money_on_table['Strategi'] = "MARGINAL-BOOST"
-        money_on_table['Rekommendation'] = "Säljer för snabbt. Sänk rabatten för att rädda marginal."
+        money_on_table['Rekommendation'] = "Säljer för snabkt. Sänk rabatten för att rädda marginal."
 
         # --- KATEGORI 2: STUCK IN WAREHOUSE (HÖJ RABATTEN) ---
         # Logik: Lager > 100st (volym), Rabatt < 10%, Lagret räcker > 20 veckor (eller 0 sålda)
@@ -527,7 +530,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             (rea_df['ZFS Stock'] > 100) & 
             (rea_df['DiscountRate'] < 0.10) & 
             ((rea_df['Weeks Cover'] > 20) | (rea_df['Sold'] == 0))
-        ].sort_values('Total Stock', ascending=False).copy()
+        ].sort_values('ZFS Stock', ascending=False).copy() # FIX: Sorterar nu på 'ZFS Stock' istället för 'Total Stock'
         
         stuck_stock['Strategi'] = "LAGERRENSNING"
         stuck_stock['Rekommendation'] = "Djupt lager som står stilla. Höj rabatten för att frigöra kapital."
@@ -567,7 +570,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             st.error(f"Hittade {len(conflict_report)} artiklar med priskonflikter!")
             st.dataframe(conflict_report[['Zalando article variant', 'article_name', 'Pris-varianter', 'Antal Priser']], use_container_width=True)
             
-            # Skapa fil för nedladdning
             csv_conflict = conflict_report.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
                 label="📥 Ladda ner Rapport: Priskonflikter",
@@ -580,7 +582,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
 
         st.markdown("---")
         
-        # Vi slår ihop de NYA listorna (de som faktiskt finns i minnet nu)
+        # Vi slår ihop de NYA listorna
         full_action_plan = pd.concat([money_on_table, stuck_stock])
         
         if not full_action_plan.empty:
