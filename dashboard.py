@@ -508,12 +508,12 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         rea_df = rea_df.loc[:, ~rea_df.columns.duplicated()]
         
         # Weeks Cover: Hur många veckor räcker nuvarande lager med nuvarande säljtakt?
-        rea_df['Weeks Cover'] = rea_df['Total Stock'] / (rea_df['Sold'] + 0.1)
+        rea_df['Weeks Cover'] = rea_df['ZFS Stock'] / (rea_df['Sold'] + 0.1)
         
         # --- KATEGORI 1: MONEY ON THE TABLE (SÄNK RABATTEN) ---
         # Logik: Lager > 50st (inga slattar), Rabatt > 15%, Lagret räcker < 5 veckor
         money_on_table = rea_df[
-            (rea_df['Total Stock'] > 50) & 
+            (rea_df['ZFS Stock'] > 50) & 
             (rea_df['DiscountRate'] > 0.15) & 
             (rea_df['Weeks Cover'] < 5)
         ].sort_values('Weeks Cover').copy()
@@ -524,7 +524,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         # --- KATEGORI 2: STUCK IN WAREHOUSE (HÖJ RABATTEN) ---
         # Logik: Lager > 100st (volym), Rabatt < 10%, Lagret räcker > 20 veckor (eller 0 sålda)
         stuck_stock = rea_df[
-            (rea_df['Total Stock'] > 100) & 
+            (rea_df['ZFS Stock'] > 100) & 
             (rea_df['DiscountRate'] < 0.10) & 
             ((rea_df['Weeks Cover'] > 20) | (rea_df['Sold'] == 0))
         ].sort_values('Total Stock', ascending=False).copy()
@@ -538,23 +538,23 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         with c1:
             st.error("📉 Money on the Table (Sänk rabatt)")
             st.caption("Volymartiklar (>50st) som säljer slut för snabbt pga för hög rea.")
-            st.dataframe(money_on_table[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'Total Stock']]
+            st.dataframe(money_on_table[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'ZFS Stock']]
                          .style.format({
                              'DiscountRate': '{:.1%}', 
                              'Weeks Cover': '{:.1f} v', 
                              'Sold': '{:,.0f}', 
-                             'Total Stock': '{:,.0f}'
+                             'ZFS Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
 
         with c2:
             st.warning("📦 Stuck in Warehouse (Höj rabatt)")
             st.caption("Stora lager (>100st) som inte rör sig. Binder kapital.")
-            st.dataframe(stuck_stock[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'Total Stock']]
+            st.dataframe(stuck_stock[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'ZFS Stock']]
                          .style.format({
                              'DiscountRate': '{:.1%}', 
                              'Weeks Cover': '{:.1f} v', 
                              'Sold': '{:,.0f}', 
-                             'Total Stock': '{:,.0f}'
+                             'ZFS Stock': '{:,.0f}'
                          }), use_container_width=True, hide_index=True)
 
 
@@ -588,7 +588,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
             export_df = full_action_plan[[
                 'Zalando article variant', 
                 'article_name', 
-                'Total Stock', 
+                'ZFS Stock', 
                 'Sold', 
                 'Weeks Cover',   # Ersatte Velocity
                 'DiscountRate', 
