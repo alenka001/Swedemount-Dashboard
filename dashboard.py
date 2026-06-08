@@ -498,23 +498,21 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         st.subheader("🎯 REA Manager: Margin Recovery & Stock Health")
         
         # 1. Förbered data & Beräkna Weeks Cover
-        # Vi mergar försäljning (df_cw) med lager (inv_map)
         rea_df = df_cw.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='inner')
 
-        # --- FIX: Lägg till zfs_col i rename-satsen så att 'ZFS Stock' definieras! ---
+        # Sätt rätt namn på kolumnerna
         rea_df = rea_df.rename(columns={
             inv_sku_col: 'Zalando article variant',
             zfs_col: 'ZFS Stock'
         })
 
-        # --- FIX: RADERA DUBBLETTER AV KOLUMN-NAMN ---
+        # Radera dubbletter av kolumnnamn från merge
         rea_df = rea_df.loc[:, ~rea_df.columns.duplicated()]
         
-        # Weeks Cover: Hur många veckor räcker nuvarande ZFS-lager med nuvarande säljtakt?
+        # Weeks Cover baserat på enbart ZFS Stock
         rea_df['Weeks Cover'] = rea_df['ZFS Stock'] / (rea_df['Sold'] + 0.1)
         
         # --- KATEGORI 1: MONEY ON THE TABLE (SÄNK RABATTEN) ---
-        # Logik: Lager > 50st (inga slattar), Rabatt > 15%, Lagret räcker < 5 veckor
         money_on_table = rea_df[
             (rea_df['ZFS Stock'] > 50) & 
             (rea_df['DiscountRate'] > 0.15) & 
@@ -522,85 +520,80 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         ].sort_values('Weeks Cover').copy()
         
         money_on_table['Strategi'] = "MARGINAL-BOOST"
-        money_on_table['Rekommendation'] = "Säljer för snabkt. Sänk rabatten för att rädda marginal."
+        money_on_table['Rekommendation'] = "Säljer för snabbt. Sänk rabatten för att rädda marginal."
 
-        # --- KATEGORI 2: STUCK IN WAREHOUSE (HÖJ RABATTEN) ---
-        # Logik: Lager > 100st (volym), Rabatt < 10%, Lagret räcker > 20 veckor (eller 0 sålda)
+        # --- KATEGORI 2: STUCK IN WAREHOUSE (STARTA REA) ---
         stuck_stock = rea_df[
             (rea_df['ZFS Stock'] > 100) & 
             (rea_df['DiscountRate'] < 0.10) & 
             ((rea_df['Weeks Cover'] > 20) | (rea_df['Sold'] == 0))
-        ].sort_values('ZFS Stock', ascending=False).copy() # FIX: Sorterar nu på 'ZFS Stock' istället för 'Total Stock'
+        ].sort_values('ZFS Stock', ascending=False).copy()
         
-        stuck_stock['Strategi'] = "LAGERRENSNING"
-        stuck_stock['Rekommendation'] = "Djupt lager som står stilla. Höj rabatten för att frigöra kapital."
+        stuck_stock['Strategi'] = "STARTA REA"
+        stuck_stock['Rekommendation'] = "Djupt fullprislager som står stilla. Aktivera en 15-20% introduktionsrea."
+
+        # --- KATEGORI 3: DEEPEN MARKDOWNS (ÖKA REAN YTTERLIGARE) ---
+        deepen_promo = rea_df[
+            (rea_df['ZFS Stock'] > 100) & 
+            (rea_df['DiscountRate'] >= 0.10) & 
+            (rea_df['Weeks Cover'] > 25)
+        ].sort_values('ZFS Stock', ascending=False).copy()
+        
+        deepen_promo['Strategi'] = "ÖKA REAN (+5%)"
+        deepen_promo['Rekommendation'] = "Befintlig rea ger inte tillräcklig effekt. Höj rabatten med ytterligare 5-10%."
 
         # --- VISUALISERING I DASHBOARD ---
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         
         with c1:
             st.error("📉 Money on the Table (Sänk rabatt)")
-            st.caption("Volymartiklar (>50st) som säljer slut för snabbt pga för hög rea.")
+            st.caption("Volymartiklar (>50st) som säljer slut för snabbt.")
             st.dataframe(money_on_table[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'ZFS Stock']]
-                         .style.format({
-                             'DiscountRate': '{:.1%}', 
-                             'Weeks Cover': '{:.1f} v', 
-                             'Sold': '{:,.0f}', 
-                             'ZFS Stock': '{:,.0f}'
-                         }), use_container_width=True, hide_index=True)
+                         .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v', 'Sold': '{:,.0f}', 'ZFS Stock': '{:,.0f}'}), use_container_width=True, hide_index=True)
 
         with c2:
-            st.warning("📦 Stuck in Warehouse (Höj rabatt)")
-            st.caption("Stora lager (>100st) som inte rör sig. Binder kapital.")
+            st.warning("📦 Stuck in Warehouse (Starta rea)")
+            st.caption("Stora fullprislager (>100st) som inte rör sig.")
             st.dataframe(stuck_stock[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'ZFS Stock']]
-                         .style.format({
-                             'DiscountRate': '{:.1%}', 
-                             'Weeks Cover': '{:.1f} v', 
-                             'Sold': '{:,.0f}', 
-                             'ZFS Stock': '{:,.0f}'
-                         }), use_container_width=True, hide_index=True)
+                         .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v', 'Sold': '{:,.0f}', 'ZFS Stock': '{:,.0f}'}), use_container_width=True, hide_index=True)
 
+        with c3:
+            st.info("🔥 Deepen Markdowns (Höj rean)")
+            st.caption("Redan reade varor (>100st) där rean är för svag.")
+            st.dataframe(deepen_promo[['Zalando article variant', 'DiscountRate', 'Weeks Cover', 'Sold', 'ZFS Stock']]
+                         .style.format({'DiscountRate': '{:.1%}', 'Weeks Cover': '{:.1f} v', 'Sold': '{:,.0f}', 'ZFS Stock': '{:,.0f}'}), use_container_width=True, hide_index=True)
 
-        # --- NY SEKTION: PRISKONFLIKTER ---
+        # --- NY SEKTION: PRISKONFLIKTER (SÄKRAD MOT KEYERROR) ---
         st.markdown("---")
         st.subheader("⚠️ Priskonflikter (Dubbla priser på samma SKU)")
         st.write("Dessa produkter har två eller fler olika REA-priser aktiva samtidigt.")
 
-        if not conflict_report.empty:
+        if not conflict_report.empty and 'Antal Priser' in conflict_report.columns:
             st.error(f"Hittade {len(conflict_report)} artiklar med priskonflikter!")
-            st.dataframe(conflict_report[['Zalando article variant', 'article_name', 'Pris-varianter', 'Antal Priser']], use_container_width=True)
+            st.dataframe(conflict_report[['Zalando article variant', 'article_name', 'Pris-varianter', 'Antal Priser']], use_container_width=True, hide_index=True)
             
             csv_conflict = conflict_report.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 Ladda ner Rapport: Priskonflikter",
-                data=csv_conflict,
-                file_name='Zalando_Price_Conflicts.csv',
-                mime='text/csv'
-            )
+            st.download_button(label="📥 Ladda ner Rapport: Priskonflikter", data=csv_conflict, file_name='Zalando_Price_Conflicts.csv', mime='text/csv', key='btn_conflict_dl')
         else:
             st.success("Inga priskonflikter hittades. Alla SKU:er har enhetlig prissättning!")
 
+        # --- EXPORT: STRATEGISK ACTION PLAN ---
         st.markdown("---")
-        
-        # Vi slår ihop de NYA listorna
-        full_action_plan = pd.concat([money_on_table, stuck_stock])
+        full_action_plan = pd.concat([money_on_table, stuck_stock, deepen_promo])
         
         if not full_action_plan.empty:
-            # Vi väljer de kolumner som vi skapade i den nya logiken
             export_df = full_action_plan[[
                 'Zalando article variant', 
                 'article_name', 
                 'ZFS Stock', 
                 'Sold', 
-                'Weeks Cover',   # Ersatte Velocity
+                'Weeks Cover', 
                 'DiscountRate', 
                 'Strategi', 
-                'Rekommendation' # Ersatte Rekommenderad Åtgärd
+                'Rekommendation'
             ]].copy()
             
-            # Gör rabatten snygg för Excel (t.ex. 20%)
             export_df['DiscountRate'] = export_df['DiscountRate'].apply(lambda x: f"{x:.1%}")
-            
             csv = export_df.to_csv(index=False).encode('utf-8-sig')
             
             st.download_button(
@@ -608,7 +601,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 data=csv,
                 file_name='Zalando_Strategic_Action_Plan.csv',
                 mime='text/csv',
-                key='strategic_plan_v2' # Unikt ID för knappen
+                key='strategic_plan_v3'
             )
         else:
             st.write("Inga produkter matchar kriterierna för åtgärder just nu.")
