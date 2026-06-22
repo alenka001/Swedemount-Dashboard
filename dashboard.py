@@ -302,23 +302,23 @@ if all([f_cw, f_lw, f_ly, f_inv]):
                 use_container_width=True
             )
 
-    with tabs[1]: # TOP 50 (STATUS OCH RÖD MARKERING)
-        st.subheader("🏆 Top 50 Revenue Performance & Stock Alerts")
+    with tabs[1]: # TOP 100 (STATUS OCH RÖD MARKERING)
+        st.subheader("🏆 Top 100 Revenue Performance & Stock Alerts")
         cw_top = df_cw.groupby(['join_key', 'Article variant'])[['NMV_EUR', 'Sold']].sum().reset_index()
         cw_top['Rank_CW'] = cw_top['NMV_EUR'].rank(ascending=False, method='min')
         
         lw_top = df_lw.groupby(['join_key'])[['NMV_EUR']].sum().reset_index()
         lw_top['Rank_LW'] = lw_top['NMV_EUR'].rank(ascending=False, method='min')
         
-        t50 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').fillna(0)
-        t50 = t50.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
+        t100 = cw_top.merge(lw_top[['join_key', 'Rank_LW']], on='join_key', how='left').fillna(0)
+        t100 = t100.merge(inv_map, left_on='join_key', right_on=inv_sku_col, how='left').fillna(0)
 
         # --- FIX: Säkerställ unika kolumnnamn även här ---
-        t50 = t50.loc[:, ~t50.columns.duplicated()]
+        t100 = t100.loc[:, ~t100.columns.duplicated()]
         
-        t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
-        t50_f = t50.sort_values('Rank_CW').head(50)
-        disp = t50_f.rename(columns={'join_key': 'SKU', inv_name_col: 'Article Name', 'NMV_EUR': 'NMV €', zfs_col: 'Stock ZFS', pf_col: 'Stock PF'})
+        t100['Status'] = t100.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
+        t100_f = t100.sort_values('Rank_CW').head(100)
+        disp = t100_f.rename(columns={'join_key': 'SKU', inv_name_col: 'Article Name', 'NMV_EUR': 'NMV €', zfs_col: 'Stock ZFS', pf_col: 'Stock PF'})
         
         def highlight_stock_alert(row):
             styles = [''] * len(row)
@@ -488,10 +488,10 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         c_a1, c_a2 = st.columns(2)
         with c_a1:
             st.info("**Topp Omsättning**")
-            for i, r in t50_f.head(3).iterrows(): st.write(f"💰 €{r['NMV_EUR']:,.0f} - {r[inv_name_col]}")
+            for i, r in t100_f.head(3).iterrows(): st.write(f"💰 €{r['NMV_EUR']:,.0f} - {r[inv_name_col]}")
         with c_a2:
             st.error("**Lager-Attention**")
-            crit = t50_f[t50_f['Total Stock'] < t50_f['Sold']].head(3)
+            crit = t100_f[t100_f['Total Stock'] < t100_f['Sold']].head(3)
             for i, r in crit.iterrows(): st.write(f"🚨 {r[inv_name_col]} (Lager: {r['Total Stock']:.0f}st)")
 
     with tabs[7]: # 🔥 REA Manager: Strategic Action Plan
