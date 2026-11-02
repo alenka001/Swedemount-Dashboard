@@ -38,8 +38,9 @@ st.markdown("""
 def clean_val(val, is_pct=False):
     if pd.isna(val) or val == '' or str(val).lower() == 'undefined': 
         return 0.0
-    s = str(val).strip().replace('€', '').replace('kr', '').replace('SEK', '')
+    s = str(val).strip().replace('€', '').replace('kr', '').replace('SEK', '').replace('$', '').replace('€', '')
     has_pct_sign = '%' in s
+    s = s.replace('%', '')  # Rensa bort procenttecknet innan float-konvertering
     s = re.sub(r'[\s\xa0]+', '', s)
     if not s: 
         return 0.0
@@ -193,9 +194,9 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         df['NMV_EUR'] = df[nmv_col].apply(clean_val)
         df['Sold'] = df[sold_col].apply(clean_val)
         
-        # Läs direkt av kolumn P (Sold discount rate)
+        # Läser av kolumn P (Sold discount rate)
         if disc_col:
-            df['Sold_Disc_Rate'] = df[disc_col].apply(lambda x: clean_val(x, is_pct=True))
+            df['Sold_Disc_Rate'] = df[disc_col].apply(clean_val)
         else:
             df['Sold_Disc_Rate'] = 0.0
             
@@ -340,7 +341,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
     with tabs[1]:
         st.subheader("🏆 Top 50 Revenue Performance & Sold Discounts")
         
-        # Aggregera per SKU
         cw_sku = df_cw.groupby('join_key').agg(
             NMV_EUR=('NMV_EUR', 'sum'),
             Sold=('Sold', 'sum'),
@@ -372,7 +372,7 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         t50['Status'] = t50.apply(lambda r: "🆕" if r['Rank_LW'] == 0 else ("⬆️" if r['Rank_CW'] < r['Rank_LW'] else ("⬇️" if r['Rank_CW'] > r['Rank_LW'] else "➡️")), axis=1)
         t50_f = t50.sort_values('Rank_CW').head(50).copy()
 
-        # --- Sammanfattning för hela TOP 50 gruppen ---
+        # Sammanfattning för hela TOP 50 gruppen
         top50_sold_cw = t50_f['Sold'].sum()
         top50_disc_cw = (t50_f['Sold_Disc_Vol'].sum() / top50_sold_cw) if top50_sold_cw > 0 else 0.0
         
@@ -605,7 +605,6 @@ if all([f_cw, f_lw, f_ly, f_inv]):
         
         rea_df['Weeks Cover'] = rea_df['ZFS Stock'] / (rea_df['Sold'] + 0.1)
         
-        # Kategorier
         money_on_table = rea_df[
             (rea_df['ZFS Stock'] > 50) & 
             (rea_df['DiscountRate'] > 0.15) & 
